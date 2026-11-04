@@ -18,6 +18,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,12 +28,17 @@ import java.util.Map;
  * vanilla reach: no movement, no background inventory reading, no invented
  * success. Unobtrusive mode only suppresses the local container screen, so the
  * mouse stays captured, the view never turns and the held slot never changes.
+ *
+ * <p>One visit empties everything the container can give for the current
+ * deficit, then closes and reopens once to have the server confirm the totals.</p>
  */
 public final class RestockController {
     private enum Phase {
         IDLE, PREPARE, OPENING, VERIFY_OPEN, READY, PICKUP_CHECK, DEPOSIT,
-        RETURN_REMAINDER, SETTLE, REOPEN_DELAY, MANUAL_PAUSE
+        RETURN_REMAINDER, REOPEN_DELAY, MANUAL_PAUSE
     }
+
+    private static final int MAX_STACKS_PER_VISIT = 64;
 
     private final MinecraftClient client;
     private final RestockConfig config;
@@ -67,12 +73,32 @@ public final class RestockController {
     private int sourceSlot = -1;
     private int remainingToDeposit;
     private long beforeDirect;
-    private long confirmedThisVisit;
     private boolean checkingTransfer;
+
+    /** Everything planned for this container visit, merged per item. */
+    private final List<BatchEntry> batch = new ArrayList<>();
+    private int stacksThisVisit;
+    private boolean capacityLimited;
+
+    /** Reason collected while the container is reopened for authoritative totals. */
+    private String pendingReason = "";
 
     private String status = "已关闭";
     private String lastChat = "";
     private long lastChatTick = -1000;
+
+    /** One planned amount for an item, with the inventory baseline it started from. */
+    private static final class BatchEntry {
+        final ItemStack sample;
+        final long before;
+        long planned;
+
+        BatchEntry(ItemStack sample, long before, long planned) {
+            this.sample = sample;
+            this.before = before;
+            this.planned = planned;
+        }
+    }
 
     public RestockController(MinecraftClient client, RestockConfig config) {
         this.client = client;
@@ -142,34 +168,46 @@ public final class RestockController {
             return true;
         }
 
-        // A screen we did not ask for: the user or another mod took over. Close our
-        // hidden container first so their screen is not bound to our handler.
-        if (hiddenSession) {
-            if (!safelyCloseHiddenSession()) {
-                manualTakeover();
-                notice("无法安全归位鼠标物品，已让出控制");
-            }
-            return false;
-        }
-
-        if (phase != Phase.IDLE && phase != Phase.MANUAL_PAUSE && !ownsCurrentScreen()) {
-            // Chat, inventory, pause menu...: stop before clicking a stale handler.
-            enabled = false;
-            stopRequested = true;
-        }
+        // A screen we did not ask for: the user opened something. Close our hidden
+        // container so their screen works, but keep restocking armed: it resumes as
+        // soon as the screen is closed again.
+        if (hiddenSession) safelyCloseHiddenSession();
+        if (phase != Phase.IDLE && phase != Phase.MANUAL_PAUSE) pauseForScreen();
         return false;
     }
 
-    private boolean safelyCloseHiddenSession() {
+    /**
+     * Suspends the current visit without disabling the feature. The container is
+     * closed so the player's own screen behaves normally; the next idle pass
+     * reopens the same container and keeps restocking.
+     */
+    private void pauseForScreen() {
+        closeOwned();
+        batch.clear();
+        stacksThisVisit = 0;
+        capacityLimited = false;
+        transferItem = ItemStack.EMPTY;
+        plan = null;
+        sourceSlot = -1;
+        checkingTransfer = false;
+        candidate = null;
+        stopRequested = false;
+        phase = Phase.IDLE;
+        nextScan = tick;
+        InteractionGate.setBusy(false);
+        status = "你打开了界面，补料已暂停；关闭后自动继续";
+    }
+
+    private void safelyCloseHiddenSession() {
         hiddenSession = false;
-        if (client.player == null) return true;
+        if (client.player == null) return;
         ScreenHandler handler = client.player.currentScreenHandler;
         if (handler == client.player.playerScreenHandler) {
             ownedHandler = null;
             ownOpenRequested = false;
-            return true;
+            return;
         }
-        if (!handler.getCursorStack().isEmpty() && !returnCursorToSource(handler)) return false;
+        if (!handler.getCursorStack().isEmpty() && !returnCursorToSource(handler)) return;
         closingInternally = true;
         try {
             client.player.closeHandledScreen();
@@ -178,7 +216,6 @@ public final class RestockController {
         }
         ownedHandler = null;
         ownOpenRequested = false;
-        return true;
     }
 
     private boolean returnCursorToSource(ScreenHandler handler) {
@@ -215,6 +252,9 @@ public final class RestockController {
         candidate = null;
         ownOpenRequested = false;
         hiddenSession = false;
+        batch.clear();
+        stacksThisVisit = 0;
+        capacityLimited = false;
         phase = Phase.IDLE;
         cooldowns.clear();
         InteractionGate.setBusy(false);
@@ -251,6 +291,11 @@ public final class RestockController {
                 abort("当前玩家状态不能补料");
                 return;
             }
+            if (phase != Phase.IDLE && client.currentScreen != null && !ownsCurrentScreen()) {
+                // Fallback for a screen that appeared without going through our hook.
+                pauseForScreen();
+                return;
+            }
             if (ownedHandler != null && client.player.currentScreenHandler != ownedHandler) {
                 ownedHandler = null;
                 finish("容器已关闭或被替换，稍后重新扫描", false);
@@ -277,7 +322,6 @@ public final class RestockController {
                 case PICKUP_CHECK -> checkPickup();
                 case DEPOSIT -> deposit();
                 case RETURN_REMAINDER -> returnRemainder();
-                case SETTLE -> settle();
                 case REOPEN_DELAY -> reopen();
                 default -> { }
             }
@@ -302,8 +346,14 @@ public final class RestockController {
         InteractionGate.setBusy(false);
         if (!enabled || tick < nextScan) return;
         nextScan = tick + config.scanIntervalTicks;
-        if (client.currentScreen != null || client.player.currentScreenHandler != client.player.playerScreenHandler) {
-            status = "等待你关闭当前界面";
+        if (client.currentScreen != null) {
+            status = "等待你关闭界面后继续补料";
+            nextScan = tick + 5;
+            return;
+        }
+        if (client.player.currentScreenHandler != client.player.playerScreenHandler) {
+            status = "等待容器关闭";
+            nextScan = tick + 5;
             return;
         }
         if (!client.player.playerScreenHandler.getCursorStack().isEmpty()) {
@@ -346,10 +396,14 @@ public final class RestockController {
         List<ContainerScanner.Candidate> found = scanner.find(client, config, cooldowns, tick);
         if (found.isEmpty()) {
             status = "扫描中：附近没有可正常交互的补料容器";
+            // Standing still with everything on cooldown: do not rescan every tick.
+            nextScan = tick + Math.max(config.scanIntervalTicks, 20);
             return;
         }
         candidate = found.getFirst();
-        confirmedThisVisit = 0;
+        batch.clear();
+        stacksThisVisit = 0;
+        capacityLimited = false;
         checkingTransfer = false;
         InteractionGate.setBusy(true);
         // Freeze printing before the final count, otherwise consumed blocks would
@@ -488,24 +542,18 @@ public final class RestockController {
             return;
         }
         if (phase == Phase.VERIFY_OPEN) {
-            long actual = InventorySlots.countDirect(client.player, transferItem) - beforeDirect;
-            bridge.refresh(context, client.player);
-            checkingTransfer = false;
-            if (actual != plan.transferCount()) {
-                finish("服务端库存变化与计划不同（实际变化 " + actual + "），已重新核对清单", false);
-                return;
-            }
-            confirmedThisVisit += actual;
-            status = "服务端已确认补入 " + actual + " 个 " + transferItem.getName().getString();
+            verifyVisit();
+            return;
         }
         phase = Phase.READY;
         nextAction = tick + config.clickIntervalTicks;
     }
 
+    /** Takes every stack this container can contribute, one stack at a time. */
     private void ready() {
         if (tick < nextAction) return;
         if (bridge.isRecountPending()) {
-            finish("材料清单正在重新统计，先结束本轮补料", confirmedThisVisit > 0);
+            finish("材料清单正在重新统计，先结束本轮补料", false);
             return;
         }
         if (!ownedHandler.getCursorStack().isEmpty()) {
@@ -513,8 +561,11 @@ public final class RestockController {
             manualTakeover();
             return;
         }
+        if (stacksThisVisit >= MAX_STACKS_PER_VISIT) {
+            beginVerification("单次补料数量已达上限");
+            return;
+        }
         List<LitematicaBridge.Need> needs = bridge.needs(context, client.player);
-        boolean matchingButNoSpace = false;
         for (Slot slot : ownedHandler.slots) {
             if (InventorySlots.isPlayerSlot(slot, client.player) || !slot.canTakeItems(client.player)) continue;
             ItemStack source = slot.getStack();
@@ -524,7 +575,7 @@ public final class RestockController {
             int capacity = InventorySlots.capacity(ownedHandler, client.player, source);
             TransferPlanner.Plan nextPlan = TransferPlanner.planWithoutQuickMove(source.getCount(), deficit, capacity);
             if (nextPlan.kind() == TransferPlanner.Kind.NONE) {
-                matchingButNoSpace = true;
+                capacityLimited = true;
                 continue;
             }
             sourceSlot = slot.id;
@@ -538,7 +589,23 @@ public final class RestockController {
             nextAction = tick + config.clickIntervalTicks;
             return;
         }
-        finish(matchingButNoSpace ? "背包容量或安全暂存空间不足" : "该容器没有更多待补材料", confirmedThisVisit > 0);
+        // Nothing left in this container for the current deficit.
+        if (batch.isEmpty()) {
+            finish(capacityLimited ? "背包容量不足，暂不取料" : "该容器没有待补材料",
+                    false, capacityLimited ? config.successCooldownTicks : config.emptyContainerCooldownTicks);
+            return;
+        }
+        beginVerification(capacityLimited ? "背包已满，先结算本次已取材料" : "容器内待补材料已取完");
+    }
+
+    private void recordTaken(ItemStack sample, long before, long planned) {
+        for (BatchEntry entry : batch) {
+            if (InventorySlots.matches(entry.sample, sample)) {
+                entry.planned += planned;
+                return;
+            }
+        }
+        batch.add(new BatchEntry(sample, before, planned));
     }
 
     private static long deficit(List<LitematicaBridge.Need> needs, ItemStack source) {
@@ -566,8 +633,7 @@ public final class RestockController {
         if (tick < nextAction) return;
         ItemStack cursor = ownedHandler.getCursorStack();
         if (cursor.isEmpty()) {
-            phase = Phase.SETTLE;
-            nextAction = tick + config.clickIntervalTicks;
+            completeStack();
             return;
         }
         if (!InventorySlots.matches(cursor, transferItem)) {
@@ -598,40 +664,72 @@ public final class RestockController {
         if (tick < nextAction) return;
         ItemStack cursor = ownedHandler.getCursorStack();
         if (cursor.isEmpty()) {
-            phase = Phase.SETTLE;
-            nextAction = tick + config.clickIntervalTicks;
+            completeStack();
             return;
         }
         if (!returnCursorToSource(ownedHandler)) {
             abort("源槽位已变化，结束当前取料并安全归位物品");
             return;
         }
-        phase = Phase.SETTLE;
+        completeStack();
+    }
+
+    /** One stack finished: remember it, then continue with the rest of the container. */
+    private void completeStack() {
+        recordTaken(transferItem, beforeDirect, plan.transferCount());
+        stacksThisVisit++;
+        checkingTransfer = false;
+        transferItem = ItemStack.EMPTY;
+        plan = null;
+        sourceSlot = -1;
+        phase = Phase.READY;
         nextAction = tick + config.clickIntervalTicks;
     }
 
-    private void settle() {
-        if (tick < nextAction) return;
+    /** Closes the container and reopens it once so the server confirms the totals. */
+    private void beginVerification(String reason) {
+        pendingReason = reason;
         if (!ownedHandler.getCursorStack().isEmpty()) {
-            abort("鼠标物品尚未归位，取消后续取料");
+            abort("鼠标物品尚未归位，取消本次结算");
             return;
         }
-        // Accepted vanilla clicks need not be acknowledged individually. Closing and
-        // normally reopening supplies a fresh authoritative snapshot instead.
         closeOwned();
         phase = Phase.REOPEN_DELAY;
         nextAction = tick + 1;
         deadline = tick + config.syncTimeoutTicks;
-        status = "等待重新开箱核实实际转移数量";
+        status = "结算：" + reason;
     }
 
     private void reopen() {
         if (tick < nextAction) return;
         if (tick > deadline) {
-            finish("库存确认超时，本次转移未标记成功", false);
+            finish(pendingReason + "；库存确认超时，本次转移未标记成功", false);
             return;
         }
         startOpen(true);
+    }
+
+    private void verifyVisit() {
+        long total = 0;
+        boolean allMatch = true;
+        List<String> parts = new ArrayList<>();
+        for (BatchEntry entry : batch) {
+            long actual = InventorySlots.countDirect(client.player, entry.sample) - entry.before;
+            if (actual != entry.planned) allMatch = false;
+            if (actual > 0) {
+                total += actual;
+                if (parts.size() < 6) parts.add(entry.sample.getName().getString() + "×" + actual);
+            }
+        }
+        bridge.refresh(context, client.player);
+        checkingTransfer = false;
+        String summary = parts.isEmpty() ? "没有取到材料"
+                : "已取 " + String.join("、", parts)
+                + (total > 0 ? "（共 " + total + " 个）" : "");
+        if (batch.size() > 6) summary += " 等 " + batch.size() + " 种";
+        String reason = pendingReason.isEmpty() ? summary : pendingReason + "；" + summary;
+        if (!allMatch) reason += "；服务端实际数量与计划不符，已按实际刷新清单";
+        finish(reason, allMatch && total > 0);
     }
 
     private void click(int slot, int button, SlotActionType type) {
@@ -661,7 +759,7 @@ public final class RestockController {
         }
         ownedHandler = null;
         ownOpenRequested = false;
-        finalizeVisit(reason, false);
+        finalizeVisit(reason, false, config.emptyContainerCooldownTicks);
     }
 
     private void closeOwned() {
@@ -679,29 +777,36 @@ public final class RestockController {
     }
 
     private void finish(String reason, boolean success) {
+        long cooldown = success ? config.containerRevisitTicks : config.emptyContainerCooldownTicks;
+        if (success && capacityLimited) cooldown = config.successCooldownTicks;
+        finish(reason, success, cooldown);
+    }
+
+    private void finish(String reason, boolean success, long cooldownTicks) {
         if (ownedHandler != null && !ownedHandler.getCursorStack().isEmpty()) {
             abort(reason);
             return;
         }
-        finalizeVisit(reason, success);
+        finalizeVisit(reason, success, cooldownTicks);
     }
 
     /** Terminal cleanup only: never calls abort or finish. */
-    private void finalizeVisit(String reason, boolean success) {
+    private void finalizeVisit(String reason, boolean success, long cooldownTicks) {
         closeOwned();
         if (candidate != null) {
-            cooldowns.put(candidate.key(), tick
-                    + (success ? config.successCooldownTicks : config.emptyContainerCooldownTicks));
+            cooldowns.put(candidate.key(), tick + cooldownTicks);
         }
         if (checkingTransfer) reason += "；未把客户端预测计为补料成功";
-        if (confirmedThisVisit > 0) notice("本轮已确认补入 " + confirmedThisVisit + " 个材料；" + reason);
-        else status = reason;
+        notice(reason);
         candidate = null;
         transferItem = ItemStack.EMPTY;
         plan = null;
         sourceSlot = -1;
         checkingTransfer = false;
-        confirmedThisVisit = 0;
+        pendingReason = "";
+        batch.clear();
+        stacksThisVisit = 0;
+        capacityLimited = false;
         stopRequested = false;
         ownOpenRequested = false;
         hiddenSession = false;

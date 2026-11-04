@@ -19,8 +19,10 @@ public final class RestockConfig {
     public int clickIntervalTicks = 2;
     public int openTimeoutTicks = 40;
     public int syncTimeoutTicks = 60;
-    public int emptyContainerCooldownTicks = 100;
+    public int emptyContainerCooldownTicks = 200;
     public int successCooldownTicks = 20;
+    /** How long a fully drained container is left alone before it is checked again. */
+    public int containerRevisitTicks = 600;
     public int recountIntervalTicks = 200;
     public int manualPauseTicks = 60;
     /** Local GUI/focus suppression only; server interaction stays vanilla. */
@@ -76,6 +78,7 @@ public final class RestockConfig {
         syncTimeoutTicks = clamp(syncTimeoutTicks, 20, 400);
         emptyContainerCooldownTicks = clamp(emptyContainerCooldownTicks, 20, 1200);
         successCooldownTicks = clamp(successCooldownTicks, 5, 600);
+        containerRevisitTicks = clamp(containerRevisitTicks, 20, 6000);
         recountIntervalTicks = clamp(recountIntervalTicks, 100, 2400);
         manualPauseTicks = clamp(manualPauseTicks, 20, 600);
     }
