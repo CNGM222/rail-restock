@@ -28,10 +28,10 @@ public final class RestockConfig {
     /**
      * Automatically re-count the building material list. Litematica shows its own
      * "scheduled task added" chat line and HUD progress for every count, so this is
-     * optional. When off, the mod never schedules a count itself; it only uses a
-     * list that was already counted once.
+     * opt-in and off by default. When off, the mod never schedules a count itself;
+     * it only uses a list that was already counted once.
      */
-    public boolean autoRecountMaterialList = true;
+    public boolean autoRecountMaterialList = false;
     public boolean includeChests = true;
     public boolean includeBarrels = true;
     public boolean includeShulkerBoxes = true;
@@ -48,8 +48,10 @@ public final class RestockConfig {
                 JsonObject tree = JsonParser.parseReader(reader).getAsJsonObject();
                 RestockConfig config = gson.fromJson(tree, RestockConfig.class);
                 if (config == null) throw new IllegalArgumentException("配置文件内容为空");
+                // Missing keys fall back to the current defaults explicitly, because
+                // Gson bypasses field initialisers and would leave them false anyway.
                 if (!tree.has("unobtrusiveInteraction")) config.unobtrusiveInteraction = true;
-                if (!tree.has("autoRecountMaterialList")) config.autoRecountMaterialList = true;
+                if (!tree.has("autoRecountMaterialList")) config.autoRecountMaterialList = false;
                 config.validate();
                 return config;
             } catch (IOException | RuntimeException e) {

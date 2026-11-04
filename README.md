@@ -46,7 +46,7 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 | 字段 | 默认 | 说明 |
 | --- | ---: | --- |
 | `unobtrusiveInteraction` | `true` | 无感模式：隐藏自动打开的容器界面。设为 `false` 则显示箱子界面 |
-| `autoRecountMaterialList` | `true` | 自动重算建筑缺失清单。设为 `false` 后本 Mod 不再自动触发统计（也就没有 Litematica 的「已添加任务」提示与 HUD 统计） |
+| `autoRecountMaterialList` | `false` | 自动重算建筑缺失清单。默认关闭，本 Mod 不会自动触发统计（也就没有 Litematica 的「已添加任务」提示与 HUD 统计） |
 | `scanIntervalTicks` | 5 | 空闲扫描间隔 |
 | `clickIntervalTicks` | 2 | 精确槽位操作间隔 |
 | `openTimeoutTicks` | 40 | 开箱与完整库存等待上限 |
@@ -65,8 +65,10 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 
 `autoRecountMaterialList` 控制**是否由本 Mod 自动触发 Litematica 的材料统计**。每次统计 Litematica 自己都会在聊天里打一行「已添加任务」，并在 HUD 上跑进度——这是它的提示，不是本 Mod 发的，所以只能通过不触发统计来消除。
 
-- **开启（默认）**：每次补料前、以及空闲时定期重算建筑缺失量，缺口最准。代价是会出现上述提示与 HUD 统计。
-- **关闭**：本 Mod 不再调度任何统计任务，除了补料瞬间的提示外几乎无打扰。此时它只用**已有的一次统计结果**计算缺口；建筑进度变化后缺口会偏大，可能多拿一点材料，需要你在 Litematica 里手动刷新一次清单来校正。
+- **关闭（默认）**：本 Mod 不再调度任何统计任务，除了补料瞬间的提示外几乎无打扰。此时它只用**已有的一次统计结果**计算缺口；建筑进度变化后缺口会偏大，可能多拿一点材料，需要你在 Litematica 里手动刷新一次清单来校正。
+- **开启**：每次补料前、以及空闲时定期重算建筑缺失量，缺口最准。代价是会出现上述提示与 HUD 统计。
+
+另外，每个投影**第一次**被本 Mod 读取时，Litematica 自己的懒加载仍会算一次（可能仍有一条提示），之后只要关闭该选项就不会再触发。
 
 无论开关如何，补料成功后本 Mod 都会**静默**更新背包可用数量（这一步不触发 Litematica 提示，是防止重复搬料的关键）。
 

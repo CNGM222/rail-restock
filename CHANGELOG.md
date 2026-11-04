@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.2.2
+
+- `autoRecountMaterialList` 默认值由 `true` 改为 `false`：默认不再自动触发 Litematica 材料重算，因此不会出现它的「已添加任务」提示与 HUD 统计。
+- 需要时在 `config/railrestock.json` 里改成 `true` 即可恢复自动重算。
+- 老配置文件若已有该字段会保留用户设置，不会被强制覆盖。
+
 ## 0.2.1
 
 - 新增配置项 `autoRecountMaterialList`（默认 `true`）：是否自动触发 Litematica 的材料统计。
