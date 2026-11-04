@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "railrestock",
+  "version": "${version}",
+  "name": "Rail Restock",
+  "description": "Restocks the selected Litematica placement from normally reachable containers, including while riding a minecart.",
+  "authors": ["Rail Restock contributors"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": { "client": ["dev.railrestock.RailRestockClient"] },
+  "mixins": ["railrestock.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": "*",
+    "litematica": "*",
+    "malilib": "*"
+  }
+}
