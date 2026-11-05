@@ -5,7 +5,7 @@
   "name": "Rail Restock",
   "description": "Restocks the selected Litematica placement from normally reachable containers, including while riding a minecart.",
   "authors": ["CNGM222"],
-  "license": "CC-BY-NC-4.0",
+  "license": "MIT",
   "environment": "client",
   "entrypoints": { "client": ["dev.railrestock.RailRestockClient"] },
   "mixins": ["railrestock.mixins.json"],
