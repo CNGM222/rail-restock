@@ -1,5 +1,7 @@
 # Rail Restock · 矿车自动补料
 
+[English](README.en.md) | 简体中文
+
 Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影材料清单的**全部剩余缺口**，从附近可正常交互的容器取料；可在矿车移动时持续扫描，默认以**无感模式**运行。
 
 ## 无感模式（0.2.0 默认开启）
