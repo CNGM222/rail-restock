@@ -45,6 +45,14 @@ public final class InventorySlots {
         return null;
     }
 
+    public static long countContainer(ScreenHandler handler, PlayerEntity player, ItemStack stack) {
+        long total = 0;
+        for (Slot slot : handler.slots) {
+            if (!isPlayerSlot(slot, player) && matches(slot.getStack(), stack)) total += slot.getStack().getCount();
+        }
+        return total;
+    }
+
     /** Direct count in the 36 main slots; excludes container contents. */
     public static long countDirect(PlayerEntity player, ItemStack stack) {
         long total = 0;

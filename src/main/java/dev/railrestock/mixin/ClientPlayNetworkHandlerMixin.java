@@ -17,7 +17,7 @@ public abstract class ClientPlayNetworkHandlerMixin {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player != null && (packet.syncId() == 0
                 || packet.syncId() == client.player.currentScreenHandler.syncId)) {
-            InventorySyncTracker.fullUpdate(packet.syncId());
+            InventorySyncTracker.fullUpdate(packet.syncId(), packet.contents());
         }
     }
 }

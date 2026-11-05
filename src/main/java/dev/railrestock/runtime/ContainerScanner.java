@@ -1,6 +1,7 @@
 package dev.railrestock.runtime;
 
 import dev.railrestock.config.RestockConfig;
+import dev.railrestock.logic.ContainerVisits;
 import net.minecraft.block.BarrelBlock;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.ChestBlock;
@@ -53,7 +54,7 @@ public final class ContainerScanner {
     }
 
     public List<Candidate> find(MinecraftClient client, RestockConfig config,
-                                Map<Long, Long> cooldowns, long tick) {
+                                Map<Long, Long> cooldowns, ContainerVisits visits, long tick) {
         List<Candidate> result = new ArrayList<>();
         if (client.player == null || client.world == null) return result;
         ItemStack mainHand = client.player.getMainHandStack();
@@ -70,7 +71,7 @@ public final class ContainerScanner {
                     BlockState state = client.world.getBlockState(pos);
                     if (!supported(state, config, mainHand)) continue;
                     long key = canonicalKey(client, pos, state);
-                    if (seen.contains(key) || cooldowns.getOrDefault(key, 0L) > tick) continue;
+                    if (seen.contains(key) || visits.contains(key) || cooldowns.getOrDefault(key, 0L) > tick) continue;
                     BlockHitResult hit = hit(client, pos, config);
                     if (hit != null) {
                         seen.add(key);
@@ -111,6 +112,23 @@ public final class ContainerScanner {
                     && eye.squaredDistanceTo(hit.getPos()) <= reachSq) return hit;
         }
         return null;
+    }
+
+    /** Keep a visit while either half of a double chest remains within physical reach.
+     * A little hysteresis prevents minecart jitter at the reach boundary from rearming it.
+     * Obstruction, facing and a temporary player screen never reset a visit.
+     */
+    public boolean isStillNearby(MinecraftClient client, long key) {
+        if (client.player == null || client.world == null) return false;
+        BlockPos pos = BlockPos.fromLong(key);
+        if (client.player.canInteractWithBlockAt(pos, 1.0)) return true;
+        if (client.world.isChunkLoaded(pos)) {
+            BlockState state = client.world.getBlockState(pos);
+            if (state.getBlock() instanceof ChestBlock && state.get(ChestBlock.CHEST_TYPE) != ChestType.SINGLE) {
+                return client.player.canInteractWithBlockAt(pos.offset(ChestBlock.getFacing(state)), 1.0);
+            }
+        }
+        return false;
     }
 
     private long canonicalKey(MinecraftClient client, BlockPos pos, BlockState state) {

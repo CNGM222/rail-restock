@@ -21,7 +21,7 @@ public final class RestockConfig {
     public int syncTimeoutTicks = 60;
     public int emptyContainerCooldownTicks = 200;
     public int successCooldownTicks = 20;
-    /** How long a fully drained container is left alone before it is checked again. */
+    /** Minimum revisit delay AFTER departure; elapsed time alone never rearms a nearby container. */
     public int containerRevisitTicks = 600;
     public int recountIntervalTicks = 200;
     public int manualPauseTicks = 60;
