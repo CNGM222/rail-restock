@@ -1,5 +1,6 @@
 package dev.railrestock;
 
+import dev.railrestock.client.RestockConfigScreen;
 import dev.railrestock.config.RestockConfig;
 import dev.railrestock.runtime.RestockController;
 import net.fabricmc.api.ClientModInitializer;
@@ -11,6 +12,7 @@ import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.util.Identifier;
+import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,17 +21,33 @@ public final class RailRestockClient implements ClientModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("railrestock");
     private static RestockController controller;
     private static KeyBinding toggleKey;
+    private static KeyBinding settingsKey;
+    private static RestockConfig config;
+    private static boolean settingsHinted;
 
     @Override
     public void onInitializeClient() {
-        RestockConfig config = RestockConfig.load(LOGGER);
+        config = RestockConfig.load(LOGGER);
         controller = new RestockController(MinecraftClient.getInstance(), config);
         KeyBinding.Category category = KeyBinding.Category.create(Identifier.of("railrestock", "main"));
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.railrestock.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F8, category));
+        settingsKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.railrestock.settings", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F7, category));
         ClientTickEvents.START_CLIENT_TICK.register(client -> {
             while (toggleKey.wasPressed()) {
-                if (client.currentScreen == null && client.player != null) controller.toggle();
+                if (client.currentScreen == null && client.player != null) {
+                    controller.toggle();
+                    if (controller.isEnabled() && !settingsHinted) {
+                        settingsHinted = true;
+                        client.player.sendMessage(Text.translatable("chat.railrestock.settingsHint"), false);
+                    }
+                }
+            }
+            while (settingsKey.wasPressed()) {
+                if (client.currentScreen == null && client.player != null) {
+                    client.setScreen(new RestockConfigScreen(null, config));
+                }
             }
             controller.tick();
         });

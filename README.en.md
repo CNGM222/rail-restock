@@ -23,6 +23,7 @@ The trade-off: Easy Place is still **paused for a very short moment** — only t
 ## Features
 
 - **F8** toggles it; rebind it under Options → Controls → Key Binds → "Minecart Auto-Restock".
+- **F7** opens a graphical settings screen (four tabs: Interaction / Containers / Pacing / Feedback). Changes save immediately and there is a "reset to defaults" button; it uses vanilla widgets only, so no ModMenu or Cloth Config is required.
 - The shortfall comes from the material list of the **currently selected and enabled** placement only; other placements are not merged in.
 - Supports chests/trapped chests, barrels, and shulker boxes placed in the world; a double chest counts once.
 - Uses the player's real interaction distance and line-of-sight collision: no extra reach, no through-wall pickup, no walking, no minecart control.
@@ -48,6 +49,21 @@ The trade-off: Easy Place is still **paused for a very short moment** — only t
 4. Launch the game, select and enable the placement you want to print, enable Easy Place as usual, then press **F8**.
 
 After launch, disconnect, or a dimension change, auto-restock is off by default and its state is not remembered. When upgrading, quit the game and remove the old JAR first; do not run two versions side by side.
+
+## Settings screen (F7)
+
+Press **F7** in game; it can be rebound in the same key category as the toggle. The screen has four tabs, every row is a vanilla widget, and a change takes effect and is written to `config/railrestock.json` immediately. "Reset to defaults" restores everything.
+
+| Tab | Contents |
+| --- | --- |
+| Interaction | Unobtrusive opening, print-pause length, open timeout, sync timeout, wait after takeover |
+| Containers | Share mapart-feeder containers, registered-only, cache lifetime, chests/barrels/shulker boxes |
+| Pacing | Scan interval, batch interval, recheck after emptying, empty cooldown, capacity retry, demand refresh |
+| Feedback | Automatic recount, chat notifications, action-bar status |
+
+- No ModMenu or Cloth Config is required; the screen works without them.
+- Opening the screen **pauses** an active restock (and safely closes the container it opened), exactly like opening your inventory; it resumes when you close the screen.
+- Numbers are sliders clamped to the valid range, so an out-of-range value cannot be written.
 
 ## Configuration
 

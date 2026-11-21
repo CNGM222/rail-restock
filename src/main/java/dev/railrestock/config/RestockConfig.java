@@ -58,8 +58,49 @@ public final class RestockConfig {
     public boolean chatNotifications = true;
     public boolean actionbarStatus = true;
 
+    private static Path path() {
+        return FabricLoader.getInstance().getConfigDir().resolve("railrestock.json");
+    }
+
+    /** Saves the current values; used by the in-game settings screen. */
+    public void save() {
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        Path path = path();
+        try {
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, gson.toJson(this) + System.lineSeparator(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            // A failed save must never break gameplay; the in-memory values stay active.
+        }
+    }
+
+    /** Restores every field to the shipped default (the settings screen's "reset"). */
+    public void resetToDefaults() {
+        RestockConfig defaults = new RestockConfig();
+        scanIntervalTicks = defaults.scanIntervalTicks;
+        clickIntervalTicks = defaults.clickIntervalTicks;
+        openTimeoutTicks = defaults.openTimeoutTicks;
+        syncTimeoutTicks = defaults.syncTimeoutTicks;
+        emptyContainerCooldownTicks = defaults.emptyContainerCooldownTicks;
+        successCooldownTicks = defaults.successCooldownTicks;
+        containerRevisitTicks = defaults.containerRevisitTicks;
+        recountIntervalTicks = defaults.recountIntervalTicks;
+        manualPauseTicks = defaults.manualPauseTicks;
+        printPauseTicks = defaults.printPauseTicks;
+        knowledgeExpireTicks = defaults.knowledgeExpireTicks;
+        unobtrusiveInteraction = defaults.unobtrusiveInteraction;
+        autoRecountMaterialList = defaults.autoRecountMaterialList;
+        shareFeederContainers = defaults.shareFeederContainers;
+        onlyMarkedContainers = defaults.onlyMarkedContainers;
+        includeChests = defaults.includeChests;
+        includeBarrels = defaults.includeBarrels;
+        includeShulkerBoxes = defaults.includeShulkerBoxes;
+        chatNotifications = defaults.chatNotifications;
+        actionbarStatus = defaults.actionbarStatus;
+    }
+
     public static RestockConfig load(Logger logger) {
-        Path path = FabricLoader.getInstance().getConfigDir().resolve("railrestock.json");
+        Path path = path();
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         if (Files.exists(path)) {
             try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
