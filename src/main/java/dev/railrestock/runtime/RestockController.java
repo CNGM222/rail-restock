@@ -5,6 +5,7 @@ import dev.railrestock.config.RestockConfig;
 import dev.railrestock.integration.LitematicaBridge;
 import dev.railrestock.logic.ContainerVisits;
 import dev.railrestock.logic.CursorTransfer;
+import dev.railrestock.logic.PrintPause;
 import dev.railrestock.logic.ScreenHider;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
 import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
@@ -80,6 +81,7 @@ public final class RestockController {
     private int sourceSlot = -1;
     private boolean checkingTransfer;
     private int clicksThisTick;
+    private final PrintPause printPause = new PrintPause();
     private long verificationBaseline;
     private String hudSummary = "";
     private long hudSummaryUntil;
@@ -125,7 +127,7 @@ public final class RestockController {
     public void toggle() {
         if (phase == Phase.MANUAL_PAUSE) {
             phase = Phase.IDLE;
-            InteractionGate.setBusy(false);
+            releasePrintPause();
         }
         enabled = !enabled;
         if (enabled) {
@@ -222,7 +224,7 @@ public final class RestockController {
         stopRequested = false;
         phase = Phase.IDLE;
         nextScan = tick;
-        InteractionGate.setBusy(false);
+        releasePrintPause();
         status = "你打开了界面，补料已暂停；关闭后自动继续";
     }
 
@@ -253,6 +255,7 @@ public final class RestockController {
         if (!InventorySlots.matches(cursor, transferItem) || InventorySlots.space(source, cursor) < cursor.getCount()) {
             return false;
         }
+        holdPrintPause();
         client.interactionManager.clickSlot(handler.syncId, sourceSlot, 0, SlotActionType.PICKUP, client.player);
         return handler.getCursorStack().isEmpty();
     }
@@ -290,7 +293,7 @@ public final class RestockController {
         visits.clear();
         hudSummary = "";
         hudSummaryUntil = 0;
-        InteractionGate.setBusy(false);
+        releasePrintPause();
         InventorySyncTracker.reset();
         MaterialGenerationTracker.reset();
     }
@@ -307,17 +310,18 @@ public final class RestockController {
         }
         try {
             visits.forgetDeparted(key -> scanner.isStillNearby(client, key));
+            syncPrintGate();
             if (phase == Phase.MANUAL_PAUSE) {
                 if (client.currentScreen == null && client.player.currentScreenHandler == client.player.playerScreenHandler) {
                     phase = Phase.IDLE;
-                    InteractionGate.setBusy(false);
+                    releasePrintPause();
                     nextScan = tick + config.manualPauseTicks;
                 }
                 showStatus();
                 return;
             }
             if (!enabled && phase == Phase.IDLE) {
-                InteractionGate.setBusy(false);
+                releasePrintPause();
                 return;
             }
             if (!client.player.isAlive() || client.player.isSpectator()) {
@@ -367,13 +371,13 @@ public final class RestockController {
                 ownOpenRequested = false;
                 hiddenSession = false;
                 phase = client.currentScreen == null ? Phase.IDLE : Phase.MANUAL_PAUSE;
+                printPause.release();
                 InteractionGate.setBusy(phase == Phase.MANUAL_PAUSE);
             }
         }
     }
 
     private void idle() {
-        InteractionGate.setBusy(false);
         if (!enabled || tick < nextScan) return;
         nextScan = tick + config.scanIntervalTicks;
         if (client.currentScreen != null) {
@@ -438,13 +442,31 @@ public final class RestockController {
         capacityLimited = false;
         blockedItems.clear();
         checkingTransfer = false;
-        InteractionGate.setBusy(true);
-        // Freeze printing before the final count, otherwise consumed blocks would
-        // turn a stale "missing" count into an artificial restocking deficit.
         requestCount();
         phase = Phase.PREPARE;
         deadline = tick + config.syncTimeoutTicks;
-        status = "暂停轻松放置，核对本次真实缺口";
+        status = "核对本次真实缺口";
+    }
+
+    /**
+     * Easy Place is held only for a few ticks around the actual slot operations.
+     * Unlike a visit-wide lock, a slow open or synchronization wait expires this
+     * deadline and lets printing continue by itself.
+     */
+    private void holdPrintPause() {
+        printPause.hold(tick, config.printPauseTicks);
+        InteractionGate.setBusy(true);
+    }
+
+    private void releasePrintPause() {
+        printPause.release();
+        InteractionGate.setBusy(false);
+    }
+
+    /** Re-evaluated every tick so the pause always ends, even if a phase stalls. */
+    private void syncPrintGate() {
+        if (phase == Phase.MANUAL_PAUSE) return;
+        InteractionGate.setBusy(printPause.active(tick));
     }
 
     private void requestCount() {
@@ -506,7 +528,12 @@ public final class RestockController {
             finish("本次经过来不及完成材料统计，等待下一圈", false);
             return;
         }
-        if (!countReady()) return;
+        if (!countReady()) {
+            // A count taken while blocks are being placed would inflate the
+            // deficit, so only this opt-in counting mode holds printing.
+            if (config.autoRecountMaterialList) holdPrintPause();
+            return;
+        }
         if (bridge.needs(context, client.player).stream().noneMatch(n -> n.deficit() > 0)) {
             finish("当前材料已够用，继续轻松放置", false);
             return;
@@ -542,6 +569,8 @@ public final class RestockController {
         phase = Phase.OPENING;
         deadline = tick + config.openTimeoutTicks;
         status = "正在打开附近容器";
+        // Only the use packet itself must not race the player's own use key.
+        holdPrintPause();
         client.interactionManager.interactBlock(client.player, hand, hit);
     }
 
@@ -627,6 +656,9 @@ public final class RestockController {
             long before = InventorySlots.countDirect(client.player, transferItem);
             long containerBefore = InventorySlots.countContainer(ownedHandler, client.player, transferItem);
             checkingTransfer = true;
+            // Clicks and the player's own placement must never interleave. Only this
+            // batch takes the gate; the deadline releases it if anything stalls.
+            holdPrintPause();
             if (plan.kind() == TransferPlanner.Kind.QUICK_MOVE) {
                 click(sourceSlot, 0, SlotActionType.QUICK_MOVE);
             } else {
@@ -711,6 +743,9 @@ public final class RestockController {
         phase = Phase.VERIFYING;
         deadline = tick + config.syncTimeoutTicks;
         status = "结算：" + reason;
+        // Hold the gate only for this short window; the deadline releases it, and
+        // the comparison below reads the container side, so printing may resume.
+        holdPrintPause();
         // Vanilla 1.21.11 accepts PICKUP/-1 as a no-op even if its cursor differs.
         // A stale revision requests updateToClient -> syncState. Normal successful
         // clicks have no guaranteed reply because their prediction hashes may match.
@@ -732,18 +767,17 @@ public final class RestockController {
         }
     }
 
+    /** The container is the authority: Easy Place may consume items after we resume. */
     private boolean snapshotMatches(InventorySyncTracker.Snapshot snapshot, BatchEntry entry) {
-        return snapshot.count(ownedHandler, client.player, entry.sample, true) - entry.before == entry.planned
-                && entry.containerBefore - snapshot.count(ownedHandler, client.player, entry.sample, false) == entry.planned;
+        return entry.containerBefore - snapshot.count(ownedHandler, client.player, entry.sample, false) == entry.planned;
     }
 
     private void verifyVisit(InventorySyncTracker.Snapshot snapshot, boolean allMatch) {
         long total = 0;
         List<String> parts = new ArrayList<>();
         for (BatchEntry entry : batch) {
-            long gained = snapshot.count(ownedHandler, client.player, entry.sample, true) - entry.before;
             long removed = entry.containerBefore - snapshot.count(ownedHandler, client.player, entry.sample, false);
-            long actual = Math.max(0, Math.min(entry.planned, Math.min(gained, removed)));
+            long actual = Math.max(0, Math.min(entry.planned, removed));
             if (actual > 0) {
                 total += actual;
                 if (parts.size() < 6) parts.add(entry.sample.getName().getString() + "×" + actual);
@@ -755,7 +789,7 @@ public final class RestockController {
                 : "已取 " + String.join("、", parts) + "（共 " + total + " 个）";
         if (batch.size() > 6) summary += " 等 " + batch.size() + " 种";
         String reason = pendingReason.isEmpty() ? summary : pendingReason + "；" + summary;
-        if (!allMatch) reason += "；服务端数量与计划不符，已按同步库存刷新清单";
+        if (!allMatch) reason += "；容器减少量与计划不符，已按同步库存刷新清单";
         hudSummary = summary;
         hudSummaryUntil = tick + 100;
         if (config.actionbarStatus) client.player.sendMessage(Text.literal("[自动补料] " + summary), true);
@@ -850,7 +884,7 @@ public final class RestockController {
         hiddenSession = false;
         phase = Phase.IDLE;
         nextScan = tick + config.scanIntervalTicks;
-        InteractionGate.setBusy(false);
+        releasePrintPause();
     }
 
     private void notice(String text) {

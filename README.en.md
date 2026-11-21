@@ -13,7 +13,7 @@ While restocking:
 - **The hotbar selection never switches** — restocking always uses the current main hand. Vanilla container blocks (chests, trapped chests, barrels, and shulker boxes placed in the world) consume the right-click and report success, so the block in your hand is never placed; no need to find an empty hand or switch slots.
 - **No action-bar spam** — only occasional hints while idle; the HUD stays clean during transfers.
 
-The trade-off: Easy Place is still **briefly paused** while restocking. The container is open on the server at that moment, and without mutual exclusion printing and restocking would compete for the same slots and items. It is released as soon as restocking ends, without changing any of your Litematica settings.
+The trade-off: Easy Place is still **paused for a very short moment** — only the few ticks that actually move items (`printPauseTicks`, default 6 ≈ 0.3 s), no longer the open and verification waits. The pause is a deadline rather than a visit-wide lock: even if the server synchronization is slow or verification times out, printing resumes on its own without pressing anything again, and none of your Litematica settings are changed.
 
 ### Two preconditions to know
 
@@ -62,6 +62,7 @@ After launch, disconnect, or a dimension change, auto-restock is off by default 
 | `containerRevisitTicks` | 600 | Minimum re-check interval when passing a fully-taken container again (30 s by default); standing still does not re-check on expiry |
 | `recountIntervalTicks` | 200 | Update build demand while idle |
 | `manualPauseTicks` | 60 | Wait after manual takeover |
+| `printPauseTicks` | 6 | How long Easy Place stays paused after the last slot action (≈0.3 s); it always expires on its own |
 | `includeChests` / `includeBarrels` / `includeShulkerBoxes` | true | Which containers to scan |
 | `chatNotifications` | true | Chat notifications |
 | `actionbarStatus` | true | Action-bar status while idle |

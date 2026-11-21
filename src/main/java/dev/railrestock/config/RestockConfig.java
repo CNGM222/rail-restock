@@ -25,6 +25,11 @@ public final class RestockConfig {
     public int containerRevisitTicks = 600;
     public int recountIntervalTicks = 200;
     public int manualPauseTicks = 60;
+    /**
+     * Easy Place is suspended only for this many ticks after the last slot action.
+     * It is a deadline, not a visit lock, so a slow server sync cannot stall printing.
+     */
+    public int printPauseTicks = 6;
     /** Local GUI/focus suppression only; server interaction stays vanilla. */
     public boolean unobtrusiveInteraction = true;
     /**
@@ -54,6 +59,7 @@ public final class RestockConfig {
                 // Gson bypasses field initialisers and would leave them false anyway.
                 if (!tree.has("unobtrusiveInteraction")) config.unobtrusiveInteraction = true;
                 if (!tree.has("autoRecountMaterialList")) config.autoRecountMaterialList = false;
+                if (!tree.has("printPauseTicks")) config.printPauseTicks = 6;
                 config.validate();
                 return config;
             } catch (IOException | RuntimeException e) {
@@ -81,6 +87,7 @@ public final class RestockConfig {
         containerRevisitTicks = clamp(containerRevisitTicks, 20, 6000);
         recountIntervalTicks = clamp(recountIntervalTicks, 100, 2400);
         manualPauseTicks = clamp(manualPauseTicks, 20, 600);
+        printPauseTicks = clamp(printPauseTicks, 1, 40);
     }
 
     private static int clamp(int value, int min, int max) {

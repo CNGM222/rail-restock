@@ -13,7 +13,7 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 - **不切换快捷栏选槽**——补料全程使用当前主手。箱子、陷阱箱、木桶、世界中的潜影盒这几种原版容器方块会直接消费这次右键并返回成功，手里的方块不会被放出去，所以不需要额外找空手或换槽。
 - **不显示操作栏刷屏**——只在空闲时偶尔提示，搬运过程中界面保持干净。
 
-代价是：补料期间仍会**短暂暂停 Easy Place**。此时容器在服务端是打开的，若不互斥，打印和取料会争抢同一批槽位与物品。补料一结束立即解除，不修改你的任何 Litematica 设置。
+代价是：补料瞬间仍会**极短暂停 Easy Place**——只覆盖真正搬运的那几个 tick（默认 `printPauseTicks = 6`，约 0.3 秒），不再等开箱同步和结算核对。暂停是**截止时间**而不是整次补料的锁：即使服务端同步变慢、结算超时，时间一到也会自动恢复打印，不需要重新按键，也不修改你的任何 Litematica 设置。
 
 ### 需要知道的两个前提
 
@@ -62,6 +62,7 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 | `containerRevisitTicks` | 600 | 已取完容器再次经过时的最小重查间隔（默认 30 秒）；原地不因到期重查 |
 | `recountIntervalTicks` | 200 | 空闲时更新建筑需求 |
 | `manualPauseTicks` | 60 | 手动接管后的等待 |
+| `printPauseTicks` | 6 | 暂停 Easy Place 的时长（tick）：每次槽位操作后只暂停这么久，约 0.3 秒，到点必然自动恢复 |
 | `includeChests` / `includeBarrels` / `includeShulkerBoxes` | true | 扫描哪些容器 |
 | `chatNotifications` | true | 聊天提示 |
 | `actionbarStatus` | true | 空闲时的操作栏状态 |
