@@ -52,18 +52,20 @@ public final class RestockConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        rebuild();
+        build();
     }
 
+    /** Vanilla's own page-switch path: clears children, drops focus and re-runs init(). */
     private void rebuild() {
-        // One write per page switch or screen close, instead of one per dragged pixel.
         saveIfDirty();
-        clearChildren();
+        clearAndInit();
+    }
+
+    private void build() {
         int columnWidth = Math.min(COLUMN_WIDTH, width - 40);
         int left = (width - columnWidth) / 2;
         int top = 40;
 
-        List<ButtonWidget> tabs = new ArrayList<>();
         Page[] pages = Page.values();
         int tabWidth = columnWidth / pages.length;
         for (int i = 0; i < pages.length; i++) {
@@ -73,7 +75,6 @@ public final class RestockConfigScreen extends Screen {
                 rebuild();
             }).dimensions(left + i * tabWidth, top, tabWidth - 2, 20).build();
             tab.active = candidate != page;
-            tabs.add(tab);
             addDrawableChild(tab);
         }
 
@@ -108,7 +109,9 @@ public final class RestockConfigScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
+        // 1.21.11 renders the background before this method: Screen.renderWithTooltip
+        // calls renderBackground and then render, and the blur may only run once per
+        // frame, so calling renderBackground here crashes the client.
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 16, 0xFFFFFF);
         super.render(context, mouseX, mouseY, delta);
     }

@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.5.1
+
+- **修复打开设置界面必崩**：1.21.11 在调用 `Screen.render` 之前已经执行过 `renderBackground`（`renderWithTooltip` 的顺序是「背景 → render」），而模糊状态每帧只允许一次，0.5.0 在 `render` 里又画了一次背景，触发 `IllegalStateException: Can only blur once per frame`。现在只画标题与控件，背景交给原版。
+- 页签切换改用原版 `clearAndInit()`（清空控件、释放焦点、重新 `init()`），避免焦点停留在已被移除的滑条上。
+- 新增字节码级回归测试：`render` 中不允许出现 `renderBackground` 调用，并且必须绘制标题、必须调用 `super.render`。
+
 ## 0.5.0
 
 - **新增图形化设置界面**：游戏内按 **F7** 打开，四个分页——交互 / 容器 / 节奏 / 提示，覆盖全部 20 项配置。
