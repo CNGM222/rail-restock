@@ -33,6 +33,10 @@ The trade-off: Easy Place is still **paused for a very short moment** — only t
 - After each settlement it reports **what was taken and how many** in chat and on the action bar, e.g. `已取 圆石×64、橡木木板×32（共 96 个）`; the action-bar summary stays for about 5 seconds.
 - On settlement it requests the server's full inventory **within the current container session**, cross-checks the inventory increase against the container decrease, and closes only once after confirmation — **no reopen-and-verify**; client-side predictions do not count as success.
 - **No repeated checks of the same container while standing still**: both empty and fully-taken containers keep their visit record, and the cooldown expiring does not reopen them. Checking is allowed again only after leaving the container's interaction range (with a 1-block buffer); both halves of a double chest share one record. A container skipped for lack of capacity is retried only after inventory space actually increased and more items can be taken, which supports printing in place and continuing after making room. Toggling F8 off and on re-checks nearby containers immediately; switching placements or the counting scope also resets the records.
+- **Shares the raw-material containers registered by mapart-feeder**: chests marked with **K** in `config/mapartfeeder.json` are used directly, with no separate registration here; that file is only read, never written.
+- **Follows mapart-feeder's chest-survey order**: chests already known to hold the missing material come first (scored by `useful × 64 ÷ distance`), never-opened chests are surveyed nearest-first, and chests known to hold nothing useful are no longer reopened.
+- **Container contents are recorded only after a real open with a full server snapshot**, never guessed at a distance; entries expire automatically (about 5 minutes) and toggling F8 off and on clears them immediately.
+- Without mapart-feeder installed it falls back to the previous nearby scan, with no errors.
 - Material-list semantics follow upstream: multiplier 1 uses `missing`, greater than 1 uses `total × multiplier` minus one `available`; user-ignored entries are kept.
 - Containers that are out of stock or cannot be opened go on cooldown instead of being opened and closed repeatedly.
 
@@ -64,6 +68,9 @@ After launch, disconnect, or a dimension change, auto-restock is off by default 
 | `manualPauseTicks` | 60 | Wait after manual takeover |
 | `printPauseTicks` | 6 | How long Easy Place stays paused after the last slot action (≈0.3 s); it always expires on its own |
 | `includeChests` / `includeBarrels` / `includeShulkerBoxes` | true | Which containers to scan |
+| `shareFeederContainers` | `true` | Read the containers registered by mapart-feeder (read-only `config/mapartfeeder.json`) and use its survey order |
+| `onlyMarkedContainers` | `false` | Open only chests registered in mapart-feeder; unmarked containers are never touched |
+| `knowledgeExpireTicks` | 6000 | How long a surveyed container's contents stay trusted (≈5 min); expired entries are surveyed again so a refilled chest is not skipped forever |
 | `chatNotifications` | true | Chat notifications |
 | `actionbarStatus` | true | Action-bar status while idle |
 
@@ -80,12 +87,28 @@ Also, the **first** time each placement is read by this mod, Litematica's own la
 
 Regardless of the setting, after a successful restock the mod **silently** updates the available inventory counts (this step triggers no Litematica message and is key to avoiding duplicate transfers).
 
+## Sharing containers with mapart-feeder
+
+Both mods read the same registry: a chest marked with **K** in mapart-feeder is written to `config/mapartfeeder.json`, and this mod reads its `containers` array (dimension + coordinates), so **one registration serves both**.
+
+- **Read-only**: this mod never edits or rewrites that file; mapart-feeder remains its only owner. A chest you mark in-game is picked up within about a second, with no restart.
+- **Chest order** (mapart-feeder's survey logic):
+  1. containers known to hold the missing materials, by `useful × 64 ÷ (distance + 1)`, highest first;
+  2. containers never opened, nearest first, so their contents get surveyed;
+  3. containers known to hold nothing useful are skipped entirely.
+- **Contents are cached** only after a real open with a full server snapshot, or after the settlement sync; taking items subtracts from the cache, so the same chest is not treated as full again.
+- **Freshness**: entries expire after 5 minutes (`knowledgeExpireTicks`) and are surveyed again; toggling F8 or switching the placement clears them immediately.
+- **Registered only**: set `onlyMarkedContainers` to `true` to open registered chests exclusively and never touch anyone else's containers.
+- Without mapart-feeder, or without the file, it falls back to the plain nearby scan without errors.
+
+Restocking still happens **only within real interaction range**: a registered chest far away is never opened remotely; it is used when the minecart passes it.
+
 ## Known limits
 
 - The contents of an unopened container cannot be known in advance; it must really be opened and wait for the server to sync. If the minecart is too fast this may not finish in time, so slow down or stop during the restocking segment.
 - Before splitting a cursor stack, the inventory must be able to hold **the entire cursor stack that might be picked up**, leaving room to put it back if the container closes unexpectedly. With only a few free slots, it may therefore hold back the last few items.
 - The full-sync request for the current session relies on vanilla 1.21.11's stale-inventory version correction. If a server plugin rejects the request, it ends after `syncTimeoutTicks` without reopening, replaying, or counting the prediction as success.
-- If a checked empty chest is refilled externally, the client cannot know remotely; leave and come back, or toggle F8 off and on, to check again.
+- If a checked empty chest is refilled externally, the client cannot know remotely; the cache expires after about 5 minutes and is surveyed again, or toggle F8 off and on to re-check immediately.
 - If the server force-closes the container or another plugin rewrites the inventory, vanilla behavior can still affect the final placement. After an interruption the mod does not treat predictions as success.
 - Non-vanilla container blocks (modded chests, etc.) are only attempted when the main hand is empty, to avoid placing items by mistake.
 - Hiding the screen is **client-side only**: the server just sees a normal container opening. Use it only in worlds or on servers that allow automatic restocking.

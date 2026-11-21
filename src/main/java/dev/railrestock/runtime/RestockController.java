@@ -2,30 +2,34 @@ package dev.railrestock.runtime;
 
 import dev.railrestock.RailRestockClient;
 import dev.railrestock.config.RestockConfig;
+import dev.railrestock.integration.FeederMarks;
 import dev.railrestock.integration.LitematicaBridge;
+import dev.railrestock.logic.ContainerRanking;
 import dev.railrestock.logic.ContainerVisits;
 import dev.railrestock.logic.CursorTransfer;
 import dev.railrestock.logic.PrintPause;
 import dev.railrestock.logic.ScreenHider;
-import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
-import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
-import net.minecraft.screen.sync.ItemStackHash;
 import dev.railrestock.logic.TransferPlanner;
+import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.item.ItemStack;
+import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
 import net.minecraft.screen.GenericContainerScreenHandler;
 import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.ShulkerBoxScreenHandler;
 import net.minecraft.screen.slot.Slot;
 import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.screen.sync.ItemStackHash;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +57,8 @@ public final class RestockController {
     private final ContainerScanner scanner = new ContainerScanner();
     private final Map<Long, Long> cooldowns = new HashMap<>();
     private final ContainerVisits visits = new ContainerVisits();
+    private final FeederMarks marks = new FeederMarks();
+    private final ContainerKnowledge knowledge = new ContainerKnowledge();
 
     private Phase phase = Phase.IDLE;
     private boolean enabled;
@@ -134,6 +140,7 @@ public final class RestockController {
             stopRequested = false;
             visits.clear();
             cooldowns.clear();
+            knowledge.clear();
             nextScan = tick;
             notice("自动补料已开启：按所选投影的全部缺口取料");
         } else {
@@ -291,6 +298,8 @@ public final class RestockController {
         phase = Phase.IDLE;
         cooldowns.clear();
         visits.clear();
+        knowledge.clear();
+        marks.clear();
         hudSummary = "";
         hudSummaryUntil = 0;
         releasePrintPause();
@@ -405,6 +414,7 @@ public final class RestockController {
                 || context.materialList() != selected.materialList() || !currentScope.equals(scope)) {
             visits.clear();
             cooldowns.clear();
+            knowledge.clear();
             context = selected;
             scope = currentScope;
             requestCount();
@@ -429,14 +439,16 @@ public final class RestockController {
             return;
         }
         cooldowns.entrySet().removeIf(entry -> entry.getValue() <= tick);
+        marks.refresh(tick);
+        knowledge.expire(tick, config.knowledgeExpireTicks);
         List<ContainerScanner.Candidate> found = scanner.find(client, config, cooldowns, visits, tick);
-        if (found.isEmpty()) {
-            status = "扫描中：附近没有可正常交互的补料容器";
+        ContainerScanner.Candidate picked = choose(found, needs);
+        if (picked == null) {
             // Standing still with everything on cooldown: do not rescan every tick.
             nextScan = tick + Math.max(config.scanIntervalTicks, 20);
             return;
         }
-        candidate = found.getFirst();
+        candidate = picked;
         batch.clear();
         stacksThisVisit = 0;
         capacityLimited = false;
@@ -446,6 +458,58 @@ public final class RestockController {
         phase = Phase.PREPARE;
         deadline = tick + config.syncTimeoutTicks;
         status = "核对本次真实缺口";
+    }
+
+    /**
+     * Picks the container the way mapart-feeder surveys its registered chests:
+     * known sources of the still-missing items first, then never-opened chests
+     * nearest-first, and never a chest already known to hold nothing useful.
+     * Marked containers can additionally be made the only allowed source.
+     */
+    private ContainerScanner.Candidate choose(List<ContainerScanner.Candidate> found,
+                                              List<LitematicaBridge.Need> needs) {
+        if (found.isEmpty()) {
+            status = "扫描中：附近没有可正常交互的补料容器";
+            return null;
+        }
+        boolean share = config.shareFeederContainers;
+        if (share && config.onlyMarkedContainers && !marks.isPresent()) {
+            status = "未找到 mapart-feeder 的登记（config/mapartfeeder.json）";
+            return null;
+        }
+        String dimension = client.world.getRegistryKey().getValue().toString();
+        Vec3d eye = client.player.getEyePos();
+        Map<Long, ContainerScanner.Candidate> byKey = new LinkedHashMap<>();
+        List<ContainerRanking.Candidate> ranked = new ArrayList<>(found.size());
+        for (ContainerScanner.Candidate option : found) {
+            boolean marked = share && marks.contains(dimension, option.key());
+            if (share && config.onlyMarkedContainers && !marked) continue;
+            boolean known = knowledge.knows(option.key());
+            long useful = known ? usefulFor(option.key(), needs) : 0L;
+            // Surveyed and holding nothing we need: do not open it again.
+            if (known && useful <= 0) continue;
+            byKey.putIfAbsent(option.key(), option);
+            ranked.add(new ContainerRanking.Candidate(option.key(),
+                    Math.sqrt(eye.squaredDistanceTo(Vec3d.ofCenter(option.pos()))), known, useful));
+        }
+        List<ContainerRanking.Candidate> ordered = ContainerRanking.order(ranked);
+        if (ordered.isEmpty()) {
+            status = share && config.onlyMarkedContainers
+                    ? "附近没有 mapart-feeder 登记的原料容器"
+                    : "附近容器都已知没有所需原料，等待经过新容器";
+            return null;
+        }
+        return byKey.get(ordered.getFirst().key());
+    }
+
+    /** How many of the still-missing items this container is known to hold. */
+    private long usefulFor(long key, List<LitematicaBridge.Need> needs) {
+        long total = 0;
+        for (LitematicaBridge.Need need : needs) {
+            if (need.deficit() <= 0 || !(need.stack() instanceof ItemStack stack)) continue;
+            total += Math.min(need.deficit(), knowledge.count(key, stack));
+        }
+        return total;
     }
 
     /**
@@ -604,9 +668,22 @@ public final class RestockController {
             notice("服务端同步后鼠标仍有物品，已停止自动操作，请检查");
             return;
         }
+        // Survey the container exactly like mapart-feeder does: remember what it
+        // currently holds so later passes can skip chests with nothing useful.
+        knowledge.record(candidate.key(), containerStacks(ownedHandler), tick);
         phase = Phase.READY;
         nextAction = tick;
         ready();
+    }
+
+    /** Container slots only; the player inventory is not part of the survey. */
+    private List<ItemStack> containerStacks(ScreenHandler handler) {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (Slot slot : handler.slots) {
+            if (InventorySlots.isPlayerSlot(slot, client.player)) continue;
+            if (!slot.getStack().isEmpty()) stacks.add(slot.getStack().copy());
+        }
+        return stacks;
     }
 
     /** Sends all eligible source-slot operations in the same tick, within a packet budget. */
@@ -671,6 +748,7 @@ public final class RestockController {
                 return;
             }
             recordTaken(transferItem, before, containerBefore, moved);
+            knowledge.subtract(candidate.key(), transferItem, (int) moved, tick);
             stacksThisVisit++;
             transferItem = ItemStack.EMPTY;
             sourceSlot = -1;
@@ -767,6 +845,18 @@ public final class RestockController {
         }
     }
 
+    /** Container slots of an authoritative snapshot; player slots are excluded. */
+    private List<ItemStack> snapshotContainerStacks(InventorySyncTracker.Snapshot snapshot) {
+        List<ItemStack> stacks = new ArrayList<>();
+        for (Slot slot : ownedHandler.slots) {
+            if (InventorySlots.isPlayerSlot(slot, client.player)) continue;
+            if (slot.id < 0 || slot.id >= snapshot.contents().size()) continue;
+            ItemStack stack = snapshot.contents().get(slot.id);
+            if (!stack.isEmpty()) stacks.add(stack.copy());
+        }
+        return stacks;
+    }
+
     /** The container is the authority: Easy Place may consume items after we resume. */
     private boolean snapshotMatches(InventorySyncTracker.Snapshot snapshot, BatchEntry entry) {
         return entry.containerBefore - snapshot.count(ownedHandler, client.player, entry.sample, false) == entry.planned;
@@ -775,6 +865,8 @@ public final class RestockController {
     private void verifyVisit(InventorySyncTracker.Snapshot snapshot, boolean allMatch) {
         long total = 0;
         List<String> parts = new ArrayList<>();
+        // The authoritative survey: what the container still holds afterwards.
+        knowledge.record(candidate.key(), snapshotContainerStacks(snapshot), tick);
         for (BatchEntry entry : batch) {
             long removed = entry.containerBefore - snapshot.count(ownedHandler, client.player, entry.sample, false);
             long actual = Math.max(0, Math.min(entry.planned, removed));

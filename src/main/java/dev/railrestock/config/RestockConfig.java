@@ -42,6 +42,19 @@ public final class RestockConfig {
     public boolean includeChests = true;
     public boolean includeBarrels = true;
     public boolean includeShulkerBoxes = true;
+    /**
+     * Share the raw-material containers registered by mapart-feeder. Its
+     * {@code config/mapartfeeder.json} is only read, never written: the other mod
+     * owns the file and rewrites it when the player marks a container with K.
+     */
+    public boolean shareFeederContainers = true;
+    /** Open only containers registered in mapart-feeder; unmarked chests are ignored. */
+    public boolean onlyMarkedContainers = false;
+    /**
+     * How long a surveyed container's contents stay trusted. Expiring them lets a
+     * chest refilled by the player be surveyed again without restarting the game.
+     */
+    public int knowledgeExpireTicks = 6000;
     public boolean chatNotifications = true;
     public boolean actionbarStatus = true;
 
@@ -60,6 +73,9 @@ public final class RestockConfig {
                 if (!tree.has("unobtrusiveInteraction")) config.unobtrusiveInteraction = true;
                 if (!tree.has("autoRecountMaterialList")) config.autoRecountMaterialList = false;
                 if (!tree.has("printPauseTicks")) config.printPauseTicks = 6;
+                if (!tree.has("shareFeederContainers")) config.shareFeederContainers = true;
+                if (!tree.has("onlyMarkedContainers")) config.onlyMarkedContainers = false;
+                if (!tree.has("knowledgeExpireTicks")) config.knowledgeExpireTicks = 6000;
                 config.validate();
                 return config;
             } catch (IOException | RuntimeException e) {
@@ -88,6 +104,7 @@ public final class RestockConfig {
         recountIntervalTicks = clamp(recountIntervalTicks, 100, 2400);
         manualPauseTicks = clamp(manualPauseTicks, 20, 600);
         printPauseTicks = clamp(printPauseTicks, 1, 40);
+        knowledgeExpireTicks = clamp(knowledgeExpireTicks, 100, 72000);
     }
 
     private static int clamp(int value, int min, int max) {
