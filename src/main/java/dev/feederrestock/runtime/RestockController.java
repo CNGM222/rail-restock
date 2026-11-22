@@ -8,10 +8,14 @@ import dev.feederrestock.integration.PrinterBridge;
 import dev.feederrestock.logic.ContainerRanking;
 import dev.feederrestock.logic.ContainerVisits;
 import dev.feederrestock.logic.CursorTransfer;
+import dev.feederrestock.logic.HighlightKind;
 import dev.feederrestock.logic.PrintPause;
 import dev.feederrestock.logic.ScreenHider;
 import dev.feederrestock.logic.TransferPlanner;
 import it.unimi.dsi.fastutil.ints.Int2ObjectMaps;
+import net.minecraft.block.BlockState;
+import net.minecraft.block.ChestBlock;
+import net.minecraft.block.enums.ChestType;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
@@ -26,13 +30,18 @@ import net.minecraft.screen.sync.ItemStackHash;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Client-thread state machine. Every interaction goes through vanilla APIs, at
@@ -57,6 +66,9 @@ public final class RestockController {
     private static final int MAX_CLICKS_PER_TICK = 128;
     /** Grace for a snapshot that does not match the plan to be superseded by a newer one. */
     private static final long VERIFICATION_GRACE_TICKS = 10;
+    /** Cached container markers are refreshed at this rate; they are only visuals. */
+    private static final long HIGHLIGHT_REFRESH_TICKS = 10;
+    private static final int MAX_HIGHLIGHTS = 32;
 
     private final MinecraftClient client;
     private final RestockConfig config;
@@ -103,6 +115,9 @@ public final class RestockController {
     private long visitPauseUntil;
     private long verificationBaseline;
     private long verificationSawAt = -1;
+    private long nextHighlightRefresh;
+    /** Registered containers to draw this frame; client thread only, never null. */
+    private final List<HighlightTarget> highlights = new ArrayList<>();
     private String hudSummary = "";
     private long hudSummaryUntil;
 
@@ -356,6 +371,8 @@ public final class RestockController {
         visits.clear();
         knowledge.clear();
         marks.clear();
+        highlights.clear();
+        nextHighlightRefresh = 0;
         hudSummary = "";
         hudSummaryUntil = 0;
         visitPauseUntil = 0;
@@ -377,6 +394,7 @@ public final class RestockController {
         try {
             visits.forgetDeparted(key -> scanner.isStillNearby(client, key));
             syncPrintGate();
+            refreshHighlights();
             if (phase == Phase.MANUAL_PAUSE) {
                 if (client.currentScreen == null && client.player.currentScreenHandler == client.player.playerScreenHandler) {
                     phase = Phase.IDLE;
@@ -566,6 +584,85 @@ public final class RestockController {
             total += Math.min(need.deficit(), knowledge.count(key, stack));
         }
         return total;
+    }
+
+    /** Registered containers to draw this frame. Client thread only. */
+    public List<HighlightTarget> highlights() {
+        return highlights;
+    }
+
+    /**
+     * Marks the registered containers with what the cache knows about them: green
+     * when the cache says they still hold part of the current deficit, yellow when
+     * they were never opened (or their cache expired), grey when they are known to
+     * hold nothing useful. Refreshed a few times per second; it is only a visual.
+     */
+    private void refreshHighlights() {
+        if (!config.highlightContainers || !enabled || context == null
+                || client.player == null || client.world == null) {
+            highlights.clear();
+            return;
+        }
+        if (tick < nextHighlightRefresh) return;
+        nextHighlightRefresh = tick + HIGHLIGHT_REFRESH_TICKS;
+        List<LitematicaBridge.Need> needs = bridge.needs(context, client.player);
+        marks.refresh(tick);
+        String dimension = client.world.getRegistryKey().getValue().toString();
+        Vec3d eye = client.player.getEyePos();
+        double rangeSq = (double) config.highlightRange * config.highlightRange;
+        Set<Long> seen = new HashSet<>();
+        List<HighlightTarget> fresh = new ArrayList<>();
+        for (BlockPos marked : marks.positions(dimension)) {
+            if (!client.world.isChunkLoaded(marked)) continue;
+            double distanceSq = eye.squaredDistanceTo(Vec3d.ofCenter(marked));
+            if (distanceSq > rangeSq) continue;
+            Box box = containerBox(marked);
+            if (box == null) continue;
+            long key = scanner.keyOf(client, marked);
+            if (!seen.add(key)) continue;
+            boolean known = knowledge.knows(key);
+            long useful = known ? usefulFor(key, needs) : 0L;
+            HighlightKind kind = HighlightKind.of(known, useful > 0);
+            fresh.add(new HighlightTarget(box, kind, highlightLabel(key, kind, needs),
+                    (int) Math.round(Math.sqrt(distanceSq))));
+        }
+        fresh.sort(Comparator.comparingInt(HighlightTarget::distance));
+        highlights.clear();
+        highlights.addAll(fresh.size() > MAX_HIGHLIGHTS ? fresh.subList(0, MAX_HIGHLIGHTS) : fresh);
+    }
+
+    /** Box covering the whole container, both halves of a double chest included. */
+    private Box containerBox(BlockPos pos) {
+        BlockState state = client.world.getBlockState(pos);
+        if (!ContainerScanner.isContainerBlock(state)) return null;
+        BlockPos other = pos;
+        if (state.getBlock() instanceof ChestBlock && state.get(ChestBlock.CHEST_TYPE) != ChestType.SINGLE) {
+            other = pos.offset(ChestBlock.getFacing(state));
+        }
+        int minX = Math.min(pos.getX(), other.getX());
+        int minY = Math.min(pos.getY(), other.getY());
+        int minZ = Math.min(pos.getZ(), other.getZ());
+        int maxX = Math.max(pos.getX(), other.getX()) + 1;
+        int maxY = Math.max(pos.getY(), other.getY()) + 1;
+        int maxZ = Math.max(pos.getZ(), other.getZ()) + 1;
+        // Slight inset so the outline does not z-fight with the block's own edges.
+        double inset = 0.002;
+        return new Box(minX + inset, minY + inset, minZ + inset,
+                maxX - inset, maxY - inset, maxZ - inset);
+    }
+
+    private String highlightLabel(long key, HighlightKind kind, List<LitematicaBridge.Need> needs) {
+        if (kind == HighlightKind.UNKNOWN) return "未勘察";
+        if (kind == HighlightKind.EMPTY) return "无所需";
+        List<String> parts = new ArrayList<>();
+        for (LitematicaBridge.Need need : needs) {
+            if (parts.size() >= 2) break;
+            if (need.deficit() <= 0 || !(need.stack() instanceof ItemStack stack)) continue;
+            long have = knowledge.count(key, stack);
+            if (have <= 0) continue;
+            parts.add(stack.getName().getString() + "×" + Math.min(need.deficit(), have));
+        }
+        return parts.isEmpty() ? "有料" : String.join("、", parts);
     }
 
     /**
@@ -1107,6 +1204,8 @@ public final class RestockController {
             sourceSlot = -1;
             visitPauseUntil = 0;
             printPause.release();
+            highlights.clear();
+            nextHighlightRefresh = 0;
             phase = client.currentScreen == null ? Phase.IDLE : Phase.MANUAL_PAUSE;
             InteractionGate.setBusy(phase == Phase.MANUAL_PAUSE);
             printer.resume();

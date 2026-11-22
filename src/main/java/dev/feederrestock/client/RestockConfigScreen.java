@@ -154,6 +154,10 @@ public final class RestockConfigScreen extends Screen {
                         value -> config.recountIntervalTicks = value));
             }
             case FEEDBACK -> {
+                rows.add(toggle("highlightContainers", () -> config.highlightContainers,
+                        value -> config.highlightContainers = value));
+                rows.add(number("highlightRange", 8, 128, () -> config.highlightRange,
+                        value -> config.highlightRange = value));
                 rows.add(toggle("autoRecountMaterialList", () -> config.autoRecountMaterialList,
                         value -> config.autoRecountMaterialList = value));
                 rows.add(toggle("chatNotifications", () -> config.chatNotifications,

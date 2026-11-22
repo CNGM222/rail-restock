@@ -40,6 +40,7 @@ The pause covers both printing paths: Litematica's **Easy Place** and the **lite
 - **Closes right after taking, verifies after closing**: the snapshot request and the close leave in the same tick, so the chest is never held open for a round trip.
 - **Paused rather than printing wrongly**: whenever the active screen handler is not the player inventory or an item sits on the cursor, Easy Place, the printer and this mod's own place/attack do nothing.
 - **No repeated checks of the same container**: one record per continuous encounter, rearmed only after leaving its interaction range (1-block hysteresis), plus a capacity-based retry.
+- **Container highlighting from the cache**: registered containers nearby get an outline — **green** when the cache says they still hold part of the current deficit (with what and how much), **yellow** when they were never surveyed, **grey** when they are known to hold nothing needed; the top-left corner lists the nearest ones with distances. Only registered chests are marked, within `highlightRange`.
 - **Container contents are recorded only after a real open with a full server snapshot**; entries expire (about 5 minutes).
 - Material-list semantics follow upstream: multiplier 1 uses `missing`, above 1 uses `total × multiplier`, minus one `available`; user-ignored entries are kept.
 - Containers out of stock or unopenable go on cooldown instead of being opened and closed repeatedly.
@@ -64,7 +65,7 @@ Press **F7** in game. Every option uses a vanilla widget, applies on click and i
 | Interaction | Unobtrusive opening, pause before opening, pause after taking, restock pause cap, wait after takeover |
 | Taking | Scan interval, batch interval, container cache lifetime, revisit after taking, capacity retry, empty cooldown |
 | Timeouts | Open timeout, sync timeout, demand refresh interval |
-| Feedback | Automatic recount, chat notifications, action bar status |
+| Feedback | Highlight registered containers, highlight range, automatic recount, chat notifications, action bar status |
 
 - No ModMenu or Cloth Config dependency.
 - Opening the screen **pauses** an active restock (and safely closes the container it opened); closing it resumes normally.
@@ -91,6 +92,8 @@ Press **F7** in game. Every option uses a vanilla widget, applies on click and i
 | `printPauseTicks` | 6 | Extra ticks of pause after the last slot action (≈0.3 s) |
 | `visitPauseCapTicks` | 40 | Maximum ticks one restock may keep printing paused (≈2 s) |
 | `knowledgeExpireTicks` | 6000 | How long surveyed container contents stay trusted (≈5 min) |
+| `highlightContainers` | true | Mark registered containers from the cache: green = has material, yellow = unsurveyed, grey = nothing needed |
+| `highlightRange` | 48 | Maximum highlight distance in blocks (8–128) |
 | `chatNotifications` | true | Chat notifications |
 | `actionbarStatus` | true | Action-bar status while idle |
 

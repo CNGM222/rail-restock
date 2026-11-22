@@ -44,15 +44,19 @@ public final class ContainerScanner {
                 || type == BarrelBlock.class || type == ShulkerBoxBlock.class;
     }
 
+    /** Any vanilla container block this mod may take from. */
+    public static boolean isContainerBlock(BlockState state) {
+        return state.getBlock() instanceof ChestBlock
+                || state.getBlock() instanceof BarrelBlock
+                || state.getBlock() instanceof ShulkerBoxBlock;
+    }
+
     /**
      * Other container subclasses may run item-specific use code, so they are only
      * accepted while the main hand is empty and nothing could be misplaced.
      */
     private static boolean supported(BlockState state, ItemStack mainHand) {
-        boolean container = state.getBlock() instanceof ChestBlock
-                || state.getBlock() instanceof BarrelBlock
-                || state.getBlock() instanceof ShulkerBoxBlock;
-        if (!container) return false;
+        if (!isContainerBlock(state)) return false;
         return alwaysConsumesUse(state) || mainHand.isEmpty();
     }
 
@@ -138,6 +142,12 @@ public final class ContainerScanner {
             }
         }
         return false;
+    }
+
+    /** Double-chest halves share one cache key; used by highlighting as well. */
+    public long keyOf(MinecraftClient client, BlockPos pos) {
+        if (client.world == null) return pos.asLong();
+        return canonicalKey(client, pos, client.world.getBlockState(pos));
     }
 
     private long canonicalKey(MinecraftClient client, BlockPos pos, BlockState state) {

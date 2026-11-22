@@ -24,6 +24,8 @@ class RestockConfigTest {
         assertFalse(config.autoRecountMaterialList);
         assertTrue(config.chatNotifications);
         assertTrue(config.actionbarStatus);
+        assertTrue(config.highlightContainers, "容器高亮默认开启");
+        assertEquals(48, config.highlightRange);
     }
 
     @Test

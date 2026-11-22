@@ -18,6 +18,8 @@
   "options.feederrestock.scanIntervalTicks": "Scan interval (ticks)",
   "options.feederrestock.clickIntervalTicks": "Batch interval (ticks)",
   "options.feederrestock.knowledgeExpireTicks": "Container cache lifetime (ticks)",
+  "options.feederrestock.highlightContainers": "Highlight registered containers",
+  "options.feederrestock.highlightRange": "Highlight range (blocks)",
   "options.feederrestock.containerRevisitTicks": "Revisit interval after taking (ticks)",
   "options.feederrestock.successCooldownTicks": "Capacity retry delay (ticks)",
   "options.feederrestock.emptyContainerCooldownTicks": "Empty container cooldown (ticks)",

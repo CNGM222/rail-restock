@@ -56,6 +56,10 @@ public final class RestockConfig {
      * chest refilled by the player be surveyed again without restarting the game.
      */
     public int knowledgeExpireTicks = 6000;
+    /** Draws a box around every registered container: green usable, yellow unknown. */
+    public boolean highlightContainers = true;
+    /** Maximum distance, in blocks, at which registered containers are highlighted. */
+    public int highlightRange = 48;
     public boolean chatNotifications = true;
     public boolean actionbarStatus = true;
 
@@ -91,6 +95,8 @@ public final class RestockConfig {
         printPauseTicks = defaults.printPauseTicks;
         visitPauseCapTicks = defaults.visitPauseCapTicks;
         knowledgeExpireTicks = defaults.knowledgeExpireTicks;
+        highlightContainers = defaults.highlightContainers;
+        highlightRange = defaults.highlightRange;
         unobtrusiveInteraction = defaults.unobtrusiveInteraction;
         autoRecountMaterialList = defaults.autoRecountMaterialList;
         chatNotifications = defaults.chatNotifications;
@@ -115,6 +121,8 @@ public final class RestockConfig {
                 if (!tree.has("printPauseTicks")) config.printPauseTicks = 6;
                 if (!tree.has("visitPauseCapTicks")) config.visitPauseCapTicks = 40;
                 if (!tree.has("knowledgeExpireTicks")) config.knowledgeExpireTicks = 6000;
+                if (!tree.has("highlightContainers")) config.highlightContainers = true;
+                if (!tree.has("highlightRange")) config.highlightRange = 48;
                 config.validate();
                 return config;
             } catch (IOException | RuntimeException e) {
@@ -146,6 +154,7 @@ public final class RestockConfig {
         printPauseTicks = clamp(printPauseTicks, 1, 40);
         visitPauseCapTicks = clamp(visitPauseCapTicks, 5, 200);
         knowledgeExpireTicks = clamp(knowledgeExpireTicks, 100, 72000);
+        highlightRange = clamp(highlightRange, 8, 128);
     }
 
     private static int clamp(int value, int min, int max) {

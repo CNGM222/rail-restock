@@ -18,6 +18,8 @@
   "options.feederrestock.scanIntervalTicks": "扫描间隔（tick）",
   "options.feederrestock.clickIntervalTicks": "分批间隔（tick）",
   "options.feederrestock.knowledgeExpireTicks": "容器缓存有效期（tick）",
+  "options.feederrestock.highlightContainers": "高亮已登记容器",
+  "options.feederrestock.highlightRange": "高亮距离（格）",
   "options.feederrestock.containerRevisitTicks": "取完后重查间隔（tick）",
   "options.feederrestock.successCooldownTicks": "容量不足重试（tick）",
   "options.feederrestock.emptyContainerCooldownTicks": "无料容器冷却（tick）",
