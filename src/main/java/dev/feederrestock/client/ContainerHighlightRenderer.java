@@ -1,18 +1,14 @@
 package dev.feederrestock.client;
 
 import dev.feederrestock.FeederRestockClient;
+import dev.feederrestock.logic.HighlightKind;
 import dev.feederrestock.runtime.HighlightTarget;
 import dev.feederrestock.runtime.RestockController;
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
-import net.minecraft.client.render.RenderLayers;
-import net.minecraft.client.render.VertexConsumer;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.VertexRendering;
-import net.minecraft.client.render.state.CameraRenderState;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.math.ColorHelper;
-import net.minecraft.util.shape.VoxelShapes;
+import fi.dy.masa.malilib.event.RenderEventHandler;
+import fi.dy.masa.malilib.interfaces.IRenderer;
+import fi.dy.masa.malilib.render.RenderUtils;
+import fi.dy.masa.malilib.util.data.Color4f;
+import org.joml.Matrix4f;
 
 import java.util.List;
 
@@ -22,38 +18,38 @@ import java.util.List;
  * yellow = never surveyed (contents unknown), grey = surveyed and holding nothing
  * the current deficit needs.
  *
- * <p>The box is drawn with the vanilla line layer at the debug-render stage, so it
- * is depth-tested like hitboxes and needs no shader or texture of its own.</p>
+ * <p>The box itself is not drawn by this mod. It uses MaLiLib's
+ * {@link RenderUtils#renderAreaOutline} — the very routine Litematica uses for its
+ * placement boxes — registered on MaLiLib's world-last render pass, so the box
+ * uses MaLiLib's debug-line pipeline, camera-relative coordinates and render
+ * context instead of a hand-written vertex flush.</p>
  */
-public final class ContainerHighlightRenderer {
+public final class ContainerHighlightRenderer implements IRenderer {
+    /** Line width in pixels, matching how Litematica draws its placement boxes. */
+    private static final float LINE_WIDTH = 2.0f;
+
+    private static final ContainerHighlightRenderer INSTANCE = new ContainerHighlightRenderer();
+
     private ContainerHighlightRenderer() { }
 
     public static void register() {
-        WorldRenderEvents.BEFORE_DEBUG_RENDER.register(ContainerHighlightRenderer::render);
+        RenderEventHandler.getInstance().registerWorldLastRenderer(INSTANCE);
     }
 
-    private static void render(WorldRenderContext context) {
+    /**
+     * Every container of the target list becomes one box; a double chest arrives as
+     * a min/max pair covering both halves, so it stays a single outline.
+     */
+    @Override
+    public void onRenderWorldLast(Matrix4f positionMatrix, Matrix4f projectionMatrix) {
         RestockController controller = FeederRestockClient.controller();
         if (controller == null) return;
         List<HighlightTarget> targets = controller.highlights();
         if (targets.isEmpty()) return;
-        VertexConsumerProvider consumers = context.consumers();
-        CameraRenderState camera = context.worldState().cameraRenderState;
-        if (consumers == null || camera == null || camera.pos == null) return;
-
-        // The world renderer works in camera space, so shift the whole scene once.
-        MatrixStack matrices = new MatrixStack();
-        matrices.translate(-camera.pos.x, -camera.pos.y, -camera.pos.z);
-        VertexConsumer lines = consumers.getBuffer(RenderLayers.lines());
         for (HighlightTarget target : targets) {
-            int color = ColorHelper.fromFloats(target.kind().red(), target.kind().green(),
-                    target.kind().blue(), 1.0f);
-            VertexRendering.drawOutline(matrices, lines, VoxelShapes.cuboid(target.box()),
-                    0.0, 0.0, 0.0, color, 2.0f);
-        }
-        if (consumers instanceof VertexConsumerProvider.Immediate immediate) {
-            // Draw now instead of waiting for the world renderer to flush this layer.
-            immediate.draw(RenderLayers.lines());
+            HighlightKind kind = target.kind();
+            Color4f color = new Color4f(kind.red(), kind.green(), kind.blue(), 1.0f);
+            RenderUtils.renderAreaOutline(target.min(), target.max(), LINE_WIDTH, color, color, color);
         }
     }
 }

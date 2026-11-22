@@ -40,7 +40,7 @@ The pause covers both printing paths: Litematica's **Easy Place** and the **lite
 - **Closes right after taking, verifies after closing**: the snapshot request and the close leave in the same tick, so the chest is never held open for a round trip.
 - **Paused rather than printing wrongly**: whenever the active screen handler is not the player inventory or an item sits on the cursor, Easy Place, the printer and this mod's own place/attack do nothing.
 - **No repeated checks of the same container**: one record per continuous encounter, rearmed only after leaving its interaction range (1-block hysteresis), plus a capacity-based retry.
-- **Container highlighting from the cache**: registered containers nearby get an outline — **green** when the cache says they still hold part of the current deficit (with what and how much), **yellow** when they were never surveyed, **grey** when they are known to hold nothing needed; the top-left corner lists the nearest ones with distances. Only registered chests are marked, within `highlightRange`.
+- **Container highlighting as a world box**: registered containers nearby get a 3D outline — **green** when the cache says they still hold part of the current deficit, **yellow** when they were never surveyed, **grey** when they are known to hold nothing needed; a double chest is drawn as one box. Only registered chests within `highlightRange` are marked, and **no text is drawn**. The box is drawn last without depth testing, so it is visible through blocks.
 - **Container contents are recorded only after a real open with a full server snapshot**; entries expire (about 5 minutes).
 - Material-list semantics follow upstream: multiplier 1 uses `missing`, above 1 uses `total × multiplier`, minus one `available`; user-ignored entries are kept.
 - Containers out of stock or unopenable go on cooldown instead of being opened and closed repeatedly.
@@ -55,6 +55,12 @@ The pause covers both printing paths: Litematica's **Easy Place** and the **lite
 Auto restock is off by default after start-up, disconnect, or a dimension change.
 
 > **Upgrading from older versions**: since 0.6.0 the mod id, package and config file were renamed. Quit the game, remove the old `rail-restock-*.jar` from `mods`, then add the new JAR. The old `config/railrestock.json` is no longer read; set your options again with F7 (defaults now match the new behaviour).
+
+## Dependencies
+
+- **At runtime**: Fabric API, Litematica, **MaLiLib** and mapart-feeder. MaLiLib is already a hard dependency of Litematica and is also where the world box is drawn from.
+- **The box is not drawn by this mod**: it calls MaLiLib's `fi.dy.masa.malilib.render.RenderUtils#renderAreaOutline` — the same routine Litematica uses for its placement boxes — from MaLiLib's world-last render callback (`RenderEventHandler.registerWorldLastRenderer`). No extra rendering library, no hand-written vertex flush, pipeline or depth state of its own.
+- **At build time**: MaLiLib is pulled from Modrinth as a `modCompileOnly` dependency (see `malilib_version` in `gradle.properties`, currently 0.27.2 / version id `zghuOVRx`). It is compile-time only and is **not** bundled into `feeder-restock-*.jar`; any 0.27.x works at runtime.
 
 ## Settings screen (F7)
 
@@ -92,7 +98,7 @@ Press **F7** in game. Every option uses a vanilla widget, applies on click and i
 | `printPauseTicks` | 6 | Extra ticks of pause after the last slot action (≈0.3 s) |
 | `visitPauseCapTicks` | 40 | Maximum ticks one restock may keep printing paused (≈2 s) |
 | `knowledgeExpireTicks` | 6000 | How long surveyed container contents stay trusted (≈5 min) |
-| `highlightContainers` | true | Mark registered containers from the cache: green = has material, yellow = unsurveyed, grey = nothing needed |
+| `highlightContainers` | true | Draw a world box on registered containers: green = has material, yellow = unsurveyed, grey = nothing needed (no text) |
 | `highlightRange` | 48 | Maximum highlight distance in blocks (8–128) |
 | `chatNotifications` | true | Chat notifications |
 | `actionbarStatus` | true | Action-bar status while idle |

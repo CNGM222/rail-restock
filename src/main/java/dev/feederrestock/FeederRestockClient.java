@@ -1,7 +1,6 @@
 package dev.feederrestock;
 
 import dev.feederrestock.client.ContainerHighlightRenderer;
-import dev.feederrestock.client.HighlightHud;
 import dev.feederrestock.client.RestockConfigScreen;
 import dev.feederrestock.config.RestockConfig;
 import dev.feederrestock.runtime.RestockController;
@@ -32,7 +31,6 @@ public final class FeederRestockClient implements ClientModInitializer {
         config = RestockConfig.load(LOGGER);
         controller = new RestockController(MinecraftClient.getInstance(), config);
         ContainerHighlightRenderer.register();
-        HighlightHud.register();
         KeyBinding.Category category = KeyBinding.Category.create(Identifier.of("feederrestock", "main"));
         toggleKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.feederrestock.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F8, category));

@@ -1,4 +1,5 @@
 plugins {
+    // Keep below / equal to the Loom that built the MaLiLib jar we compile against.
     id 'fabric-loom' version '1.14.10'
     id 'maven-publish'
 }
@@ -7,13 +8,24 @@ version = project.mod_version
 group = project.maven_group
 base { archivesName = project.archives_base_name }
 
-repositories { mavenCentral() }
+repositories {
+    mavenCentral()
+    // MaLiLib is the renderer host we borrow the in-world box routine from; it is
+    // published on Modrinth only (the masa.dy.fi maven stopped at 1.21.1).
+    maven {
+        url = 'https://api.modrinth.com/maven'
+        content { includeGroup 'maven.modrinth' }
+    }
+}
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+    // Compile-only: the box is drawn with MaLiLib's RenderUtils.renderAreaOutline, and
+    // MaLiLib is already a hard runtime dependency of Litematica (see fabric.mod.json).
+    modCompileOnly "maven.modrinth:malilib:${project.malilib_version}"
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

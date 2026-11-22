@@ -31,7 +31,6 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 import java.util.ArrayList;
@@ -595,7 +594,8 @@ public final class RestockController {
      * Marks the registered containers with what the cache knows about them: green
      * when the cache says they still hold part of the current deficit, yellow when
      * they were never opened (or their cache expired), grey when they are known to
-     * hold nothing useful. Refreshed a few times per second; it is only a visual.
+     * hold nothing useful. Refreshed a few times per second; it is only a visual and
+     * the renderer draws the boxes itself.
      */
     private void refreshHighlights() {
         if (!config.highlightContainers || !enabled || context == null
@@ -616,14 +616,14 @@ public final class RestockController {
             if (!client.world.isChunkLoaded(marked)) continue;
             double distanceSq = eye.squaredDistanceTo(Vec3d.ofCenter(marked));
             if (distanceSq > rangeSq) continue;
-            Box box = containerBox(marked);
-            if (box == null) continue;
+            Bounds bounds = containerBounds(marked);
+            if (bounds == null) continue;
             long key = scanner.keyOf(client, marked);
             if (!seen.add(key)) continue;
             boolean known = knowledge.knows(key);
             long useful = known ? usefulFor(key, needs) : 0L;
             HighlightKind kind = HighlightKind.of(known, useful > 0);
-            fresh.add(new HighlightTarget(box, kind, highlightLabel(key, kind, needs),
+            fresh.add(new HighlightTarget(bounds.min(), bounds.max(), kind,
                     (int) Math.round(Math.sqrt(distanceSq))));
         }
         fresh.sort(Comparator.comparingInt(HighlightTarget::distance));
@@ -631,38 +631,23 @@ public final class RestockController {
         highlights.addAll(fresh.size() > MAX_HIGHLIGHTS ? fresh.subList(0, MAX_HIGHLIGHTS) : fresh);
     }
 
-    /** Box covering the whole container, both halves of a double chest included. */
-    private Box containerBox(BlockPos pos) {
+    /** Inclusive block range covering the whole container, both halves of a double chest included. */
+    private record Bounds(BlockPos min, BlockPos max) { }
+
+    private Bounds containerBounds(BlockPos pos) {
         BlockState state = client.world.getBlockState(pos);
         if (!ContainerScanner.isContainerBlock(state)) return null;
         BlockPos other = pos;
         if (state.getBlock() instanceof ChestBlock && state.get(ChestBlock.CHEST_TYPE) != ChestType.SINGLE) {
             other = pos.offset(ChestBlock.getFacing(state));
         }
-        int minX = Math.min(pos.getX(), other.getX());
-        int minY = Math.min(pos.getY(), other.getY());
-        int minZ = Math.min(pos.getZ(), other.getZ());
-        int maxX = Math.max(pos.getX(), other.getX()) + 1;
-        int maxY = Math.max(pos.getY(), other.getY()) + 1;
-        int maxZ = Math.max(pos.getZ(), other.getZ()) + 1;
-        // Slight inset so the outline does not z-fight with the block's own edges.
-        double inset = 0.002;
-        return new Box(minX + inset, minY + inset, minZ + inset,
-                maxX - inset, maxY - inset, maxZ - inset);
-    }
-
-    private String highlightLabel(long key, HighlightKind kind, List<LitematicaBridge.Need> needs) {
-        if (kind == HighlightKind.UNKNOWN) return "未勘察";
-        if (kind == HighlightKind.EMPTY) return "无所需";
-        List<String> parts = new ArrayList<>();
-        for (LitematicaBridge.Need need : needs) {
-            if (parts.size() >= 2) break;
-            if (need.deficit() <= 0 || !(need.stack() instanceof ItemStack stack)) continue;
-            long have = knowledge.count(key, stack);
-            if (have <= 0) continue;
-            parts.add(stack.getName().getString() + "×" + Math.min(need.deficit(), have));
-        }
-        return parts.isEmpty() ? "有料" : String.join("、", parts);
+        return new Bounds(
+                new BlockPos(Math.min(pos.getX(), other.getX()),
+                        Math.min(pos.getY(), other.getY()),
+                        Math.min(pos.getZ(), other.getZ())),
+                new BlockPos(Math.max(pos.getX(), other.getX()),
+                        Math.max(pos.getY(), other.getY()),
+                        Math.max(pos.getZ(), other.getZ())));
     }
 
     /**

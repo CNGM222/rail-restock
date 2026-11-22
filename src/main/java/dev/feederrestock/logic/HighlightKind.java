@@ -35,14 +35,6 @@ public enum HighlightKind {
         return blue;
     }
 
-    /** Packed ARGB for HUD text, using the same colour as the world box. */
-    public int argb() {
-        return 0xFF000000
-                | (Math.round(red * 255) << 16)
-                | (Math.round(green * 255) << 8)
-                | Math.round(blue * 255);
-    }
-
     public static HighlightKind of(boolean known, boolean useful) {
         if (!known) return UNKNOWN;
         return useful ? USEFUL : EMPTY;

@@ -1,5 +1,15 @@
 # 更新记录
 
+## 0.7.1
+
+- **修复世界内高亮框不显示**：0.7.0 用原版线段层自己拼顶点，在 1.21.11 的新渲染管线下世界里一个框都没画出来（只剩左上角文字）。现在改为**直接调用 MaLiLib 的 `RenderUtils.renderAreaOutline`**——Litematica 给投影画包围框用的同一个函数——并注册到 MaLiLib 的 world-last 渲染回调；绿/黄/灰仍按缓存状态取色。
+  - 不再自己管理顶点缓冲、渲染管线、深度与相机偏移；这些全由 MaLiLib 的 `RenderContext` 处理。
+  - 框画在渲染最后、不参与深度测试，因此隔着墙也能看到（方便找箱子）。
+- **去掉左上角文字列表**：容器列表与「未勘察 / 无所需 / 有料×数量」标签全部删除，只保留世界内的方框；`highlightContainers` 与 `highlightRange` 配置项不变。
+- 双箱仍然只画**一个**框：高亮数据改为直接携带「包含两半的坐标范围」，不再做 0.002 的 Box 内缩。
+- **新增编译依赖 MaLiLib**：`build.gradle` 用 `modCompileOnly` 从 Modrinth 引入（`malilib_version=0.27.2`，版本 ID `zghuOVRx`），只参与编译、不打包进 JAR；运行时沿用 Litematica 已强制要求的 MaLiLib 0.27.x。详见 README 的「依赖」一节。
+- 新增测试：渲染接线守卫（必须实现 MaLiLib `IRenderer`、必须调用 `renderAreaOutline`、不得再自己引用原版渲染层）；颜色测试改为直接校验三段浮点色，不再依赖已删除的 HUD 打包色。
+
 ## 0.7.0
 
 - **容器高亮**：用缓存标注已登记容器，走路时一眼看出该去哪个箱子。

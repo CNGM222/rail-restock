@@ -40,7 +40,7 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 - **取完立即关箱，核对在关箱之后**：结算请求与关箱在同一 tick 发出，服务端先回完整库存快照、再处理关箱，所以箱子不会为了等一次往返而一直敞开。
 - **宁可停印也不乱印**：只要当前界面不是玩家背包（例如容器还开着），或鼠标上还拿着物品，Easy Place、投影打印机以及本 Mod 的放置/攻击**一律不执行**；关箱、光标清空后自动恢复。
 - **不反复检查同一容器**：无料、正常取完都保留访问记录；离开该容器的交互范围（带 1 格缓冲）后才重新允许检查。因容量不足跳过的容器，仅在背包空间实际增加且能继续取物后允许重试。F8 关闭再开启可立即重查，切换投影或统计范围也会重置记录。
-- **容器高亮（用缓存标注箱子）**：开启时给附近**已登记**的容器画框——**绿框**＝缓存里还有当前缺口需要的材料（并显示能拿的种类与数量），**黄框**＝还没勘察过、内容未知，**灰框**＝勘察过但没有所需的料；左上角同时列出最近的几项与距离。只标登记过的箱子，距离由 `highlightRange` 控制。
+- **容器高亮（世界内方框）**：开启时给附近**已登记**的容器画 3D 框——**绿框**＝缓存里还有当前缺口需要的材料，**黄框**＝还没勘察过、内容未知，**灰框**＝勘察过但没有所需的料；双箱两半画成一个框。只标登记过的箱子，距离由 `highlightRange` 控制，**不显示任何文字**。框画在最后、不参与深度测试，隔着方块也能看到。
 - **容器内容只在真正开箱、并拿到服务端完整库存后记录**，不隔空猜测；记录会自动过期（默认约 5 分钟）。
 - 材料清单沿用上游语义：倍数 1 用 `missing`，大于 1 用 `total × 倍数`，再减去一次 `available`；用户忽略项保留。
 - 容器缺料或打不开时进入冷却，不会来回反复开关。
@@ -55,6 +55,12 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 启动、断线、切换维度后自动补料默认关闭，不会记住开启状态。
 
 > **从旧版升级**：0.6.0 起 Mod ID、包名、配置文件都已改名。请先退出游戏，删除 `mods` 里旧的 `rail-restock-*.jar`，再放入新 JAR；旧的 `config/railrestock.json` 不再读取，可在 F7 里重新设置（默认值已按新行为调整）。
+
+## 依赖
+
+- **运行时**：Fabric API、Litematica、**MaLiLib** 和 mapart-feeder。MaLiLib 本来就是 Litematica 的强制依赖，同时也是本 Mod 世界内方框的绘制来源。
+- **方框不是本 Mod 自己拼的**：直接调用 MaLiLib 的 `fi.dy.masa.malilib.render.RenderUtils#renderAreaOutline`——Litematica 给投影画包围框用的就是同一个函数——并注册到 MaLiLib 的 world-last 渲染回调（`RenderEventHandler.registerWorldLastRenderer`）。所以不需要额外渲染库，也不需要自己管理顶点缓冲、渲染管线或深度状态。
+- **构建**：MaLiLib 以 `modCompileOnly` 从 Modrinth 取得（版本见 `gradle.properties` 的 `malilib_version`，当前为 0.27.2、版本 ID `zghuOVRx`）。它只参与编译，**不会**打进 `feeder-restock-*.jar`；运行时不限定具体小版本，0.27.x 均可。
 
 ## 设置界面（F7）
 
@@ -92,7 +98,7 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 | `printPauseTicks` | 6 | 最后一次槽位操作后额外保持暂停的 tick 数，约 0.3 秒 |
 | `visitPauseCapTicks` | 40 | 一次补料最多暂停打印多久（tick，约 2 秒） |
 | `knowledgeExpireTicks` | 6000 | 已勘察容器内容的可信时长（约 5 分钟） |
-| `highlightContainers` | true | 用缓存标注已登记容器：绿＝有料、黄＝未勘察、灰＝无所需 |
+| `highlightContainers` | true | 给已登记容器画世界内方框：绿＝有料、黄＝未勘察、灰＝无所需（不显示文字） |
 | `highlightRange` | 48 | 高亮的距离上限（格，可调 8–128） |
 | `chatNotifications` | true | 聊天提示 |
 | `actionbarStatus` | true | 空闲时的操作栏状态 |
