@@ -13,7 +13,9 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 - **不切换快捷栏选槽**——补料全程使用当前主手。箱子、陷阱箱、木桶、世界中的潜影盒这几种原版容器方块会直接消费这次右键并返回成功，手里的方块不会被放出去，所以不需要额外找空手或换槽。
 - **不显示操作栏刷屏**——只在空闲时偶尔提示，搬运过程中界面保持干净。
 
-代价是：补料瞬间仍会**极短暂停 Easy Place**——只覆盖真正搬运的那几个 tick（默认 `printPauseTicks = 6`，约 0.3 秒），不再等开箱同步和结算核对。暂停是**截止时间**而不是整次补料的锁：即使服务端同步变慢、结算超时，时间一到也会自动恢复打印，不需要重新按键，也不修改你的任何 Litematica 设置。
+代价是：补料期间会**短暂暂停打印**——从开箱到结算的整次搬运都停，正常只有几个 tick（约 0.1–0.5 秒），并受 `visitPauseCapTicks`（默认 40 tick ≈ 2 秒）硬上限保护：即使服务端同步变慢或结算超时，时间一到也会自动恢复打印，不需要重新按键，也不修改你的任何 Litematica / 打印机设置。
+
+暂停同时覆盖两条打印路径：Litematica 自带的 **Easy Place**，以及 **litematica-printer** 的打印模块（直接跳过它的每 tick 打印，不改动它的开关，所以界面上的打印指示不会来回闪）。
 
 ### 需要知道的两个前提
 
@@ -56,7 +58,7 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 
 | 分页 | 内容 |
 | --- | --- |
-| 交互 | 无感开箱、暂停打印时长、开箱超时、同步超时、手动接管后等待 |
+| 交互 | 无感开箱、暂停打印时长、补料暂停上限、开箱超时、同步超时、手动接管后等待 |
 | 容器 | 共享 mapart-feeder 容器、只开登记的容器、缓存有效期、箱子/木桶/潜影盒开关 |
 | 节奏 | 扫描间隔、分批间隔、取完后重查、无料冷却、容量不足重试、更新需求间隔 |
 | 提示 | 自动重算材料清单、聊天提示、操作栏状态 |
@@ -82,7 +84,8 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 | `containerRevisitTicks` | 600 | 已取完容器再次经过时的最小重查间隔（默认 30 秒）；原地不因到期重查 |
 | `recountIntervalTicks` | 200 | 空闲时更新建筑需求 |
 | `manualPauseTicks` | 60 | 手动接管后的等待 |
-| `printPauseTicks` | 6 | 暂停 Easy Place 的时长（tick）：每次槽位操作后只暂停这么久，约 0.3 秒，到点必然自动恢复 |
+| `printPauseTicks` | 6 | 每次槽位操作后额外保持暂停的 tick 数，约 0.3 秒，到点必然自动恢复 |
+| `visitPauseCapTicks` | 40 | 一次补料最多暂停打印多久（tick，约 2 秒）；防止服务端同步卡住时长时间停印 |
 | `includeChests` / `includeBarrels` / `includeShulkerBoxes` | true | 扫描哪些容器 |
 | `shareFeederContainers` | `true` | 读取 mapart-feeder 登记的容器（只读 `config/mapartfeeder.json`），并按其翻箱顺序选箱 |
 | `onlyMarkedContainers` | `false` | 只开 mapart-feeder 登记过的箱子，绝不碰未登记的容器；需要先安装并登记 |
@@ -139,7 +142,7 @@ build.cmd build
 
 首次需要 `tools\prepare.cmd` 准备隔离的 Gradle 发行包。构建把 Gradle 缓存、Java 用户目录与临时目录都放在工程的上级（会话）目录，不污染系统目录。
 
-产物：`build/libs/rail-restock-0.3.1.jar`。
+产物：`build/libs/rail-restock-<版本>.jar`。
 
 ## 备注
 

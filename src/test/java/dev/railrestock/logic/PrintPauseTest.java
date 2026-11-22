@@ -33,6 +33,28 @@ class PrintPauseTest {
     }
 
     @Test
+    void theVisitWindowNeverExceedsItsCap() {
+        // A stalled sync must not freeze printing: the visit holds until a cap,
+        // and the tick loop drops the gate once that absolute deadline passed.
+        PrintPause pause = new PrintPause();
+        pause.holdUntil(40);
+        assertTrue(pause.active(39));
+        assertFalse(pause.active(40));
+        assertFalse(pause.active(200));
+    }
+
+    @Test
+    void aLaterActionCanExtendTheVisitWindowButNotShortenIt() {
+        PrintPause pause = new PrintPause();
+        pause.holdUntil(40);
+        assertEquals(10, pause.remaining(30));
+        pause.hold(30, 6); // shorter than the cap: the window is unchanged
+        assertEquals(10, pause.remaining(30));
+        pause.hold(38, 6); // an action near the end extends past the cap
+        assertEquals(6, pause.remaining(38));
+    }
+
+    @Test
     void releaseRestoresPrintingImmediately() {
         PrintPause pause = new PrintPause();
         pause.hold(50, 6);

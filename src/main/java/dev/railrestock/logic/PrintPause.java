@@ -12,6 +12,11 @@ public final class PrintPause {
         until = Math.max(until, now + ticks);
     }
 
+    /** Keeps printing paused until an absolute tick, used by the capped visit window. */
+    public void holdUntil(long deadline) {
+        until = Math.max(until, deadline);
+    }
+
     public boolean active(long now) {
         return until > now;
     }

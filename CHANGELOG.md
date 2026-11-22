@@ -1,5 +1,15 @@
 # 更新记录
 
+## 0.5.2
+
+- **修复补料时不暂停打印**：之前只拦截了 Litematica 自带 Easy Place 与玩家自己的按键，**投影打印机（litematica-printer）的每 tick 打印完全不受影响**，所以用打印机时看起来“根本没暂停”。
+  - 新增 `PrinterPauseMixin`：补料期间直接取消 `Printer#onGameTick`，不改动打印机的任何开关，界面上的打印指示不会闪。
+  - 该混入带 `require = 0`：打印机升级后若没有这个方法，游戏照常启动；此时 `PrinterBridge` 退回“临时关闭打印机开关”的方案（兼容 BiliWhite 分支的 `Configs.Print.ENABLED`）。
+- **暂停窗口改为覆盖整次补料**（开箱 → 搬运 → 结算），正常只有几个 tick；同时新增硬上限 `visitPauseCapTicks`（默认 40 tick ≈ 2 秒），服务端同步卡住时不会长时间停印。
+- `printPauseTicks` 保留为“最后一次槽位操作后额外保持”的尾窗。
+- 新增设置界面项「补料暂停上限」。
+- 新增测试：打印机开关的挂起/恢复（含“玩家本来就关着时不得开启”）、暂停窗口上限、混入注解守卫。
+
 ## 0.5.1
 
 - **修复打开设置界面必崩**：1.21.11 在调用 `Screen.render` 之前已经执行过 `renderBackground`（`renderWithTooltip` 的顺序是「背景 → render」），而模糊状态每帧只允许一次，0.5.0 在 `render` 里又画了一次背景，触发 `IllegalStateException: Can only blur once per frame`。现在只画标题与控件，背景交给原版。

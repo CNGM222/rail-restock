@@ -30,6 +30,12 @@ public final class RestockConfig {
      * It is a deadline, not a visit lock, so a slow server sync cannot stall printing.
      */
     public int printPauseTicks = 6;
+    /**
+     * Hard cap for pausing while a container visit is in progress (open → transfer →
+     * settle). Printing resumes on its own after this many ticks even if the server
+     * never answers, so a stalled visit can never freeze printing for seconds.
+     */
+    public int visitPauseCapTicks = 40;
     /** Local GUI/focus suppression only; server interaction stays vanilla. */
     public boolean unobtrusiveInteraction = true;
     /**
@@ -87,6 +93,7 @@ public final class RestockConfig {
         recountIntervalTicks = defaults.recountIntervalTicks;
         manualPauseTicks = defaults.manualPauseTicks;
         printPauseTicks = defaults.printPauseTicks;
+        visitPauseCapTicks = defaults.visitPauseCapTicks;
         knowledgeExpireTicks = defaults.knowledgeExpireTicks;
         unobtrusiveInteraction = defaults.unobtrusiveInteraction;
         autoRecountMaterialList = defaults.autoRecountMaterialList;
@@ -114,6 +121,7 @@ public final class RestockConfig {
                 if (!tree.has("unobtrusiveInteraction")) config.unobtrusiveInteraction = true;
                 if (!tree.has("autoRecountMaterialList")) config.autoRecountMaterialList = false;
                 if (!tree.has("printPauseTicks")) config.printPauseTicks = 6;
+                if (!tree.has("visitPauseCapTicks")) config.visitPauseCapTicks = 40;
                 if (!tree.has("shareFeederContainers")) config.shareFeederContainers = true;
                 if (!tree.has("onlyMarkedContainers")) config.onlyMarkedContainers = false;
                 if (!tree.has("knowledgeExpireTicks")) config.knowledgeExpireTicks = 6000;
@@ -145,6 +153,7 @@ public final class RestockConfig {
         recountIntervalTicks = clamp(recountIntervalTicks, 100, 2400);
         manualPauseTicks = clamp(manualPauseTicks, 20, 600);
         printPauseTicks = clamp(printPauseTicks, 1, 40);
+        visitPauseCapTicks = clamp(visitPauseCapTicks, 5, 200);
         knowledgeExpireTicks = clamp(knowledgeExpireTicks, 100, 72000);
     }
 

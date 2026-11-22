@@ -124,6 +124,8 @@ public final class RestockConfigScreen extends Screen {
                         value -> config.unobtrusiveInteraction = value));
                 rows.add(number("printPauseTicks", 1, 40, () -> config.printPauseTicks,
                         value -> config.printPauseTicks = value));
+                rows.add(number("visitPauseCapTicks", 5, 200, () -> config.visitPauseCapTicks,
+                        value -> config.visitPauseCapTicks = value));
                 rows.add(number("openTimeoutTicks", 10, 200, () -> config.openTimeoutTicks,
                         value -> config.openTimeoutTicks = value));
                 rows.add(number("syncTimeoutTicks", 20, 400, () -> config.syncTimeoutTicks,

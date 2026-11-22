@@ -13,7 +13,9 @@ While restocking:
 - **The hotbar selection never switches** — restocking always uses the current main hand. Vanilla container blocks (chests, trapped chests, barrels, and shulker boxes placed in the world) consume the right-click and report success, so the block in your hand is never placed; no need to find an empty hand or switch slots.
 - **No action-bar spam** — only occasional hints while idle; the HUD stays clean during transfers.
 
-The trade-off: Easy Place is still **paused for a very short moment** — only the few ticks that actually move items (`printPauseTicks`, default 6 ≈ 0.3 s), no longer the open and verification waits. The pause is a deadline rather than a visit-wide lock: even if the server synchronization is slow or verification times out, printing resumes on its own without pressing anything again, and none of your Litematica settings are changed.
+The trade-off: printing is **briefly paused while restocking** — from opening the container to settling the transfer, which is normally only a few ticks (≈0.1–0.5 s). A hard cap (`visitPauseCapTicks`, default 40 ticks ≈ 2 s) guarantees printing resumes on its own even if the server sync stalls, without pressing anything again and without changing your Litematica or printer settings.
+
+The pause covers both printing paths: Litematica's **Easy Place** and the **litematica-printer** print module (its per-tick print is skipped directly, its switch is not touched, so the on-screen indicator does not flicker).
 
 ### Two preconditions to know
 
@@ -56,7 +58,7 @@ Press **F7** in game; it can be rebound in the same key category as the toggle. 
 
 | Tab | Contents |
 | --- | --- |
-| Interaction | Unobtrusive opening, print-pause length, open timeout, sync timeout, wait after takeover |
+| Interaction | Unobtrusive opening, print-pause length, restock pause cap, open timeout, sync timeout, wait after takeover |
 | Containers | Share mapart-feeder containers, registered-only, cache lifetime, chests/barrels/shulker boxes |
 | Pacing | Scan interval, batch interval, recheck after emptying, empty cooldown, capacity retry, demand refresh |
 | Feedback | Automatic recount, chat notifications, action-bar status |
@@ -82,7 +84,8 @@ Press **F7** in game; it can be rebound in the same key category as the toggle. 
 | `containerRevisitTicks` | 600 | Minimum re-check interval when passing a fully-taken container again (30 s by default); standing still does not re-check on expiry |
 | `recountIntervalTicks` | 200 | Update build demand while idle |
 | `manualPauseTicks` | 60 | Wait after manual takeover |
-| `printPauseTicks` | 6 | How long Easy Place stays paused after the last slot action (≈0.3 s); it always expires on its own |
+| `printPauseTicks` | 6 | Extra ticks of pause kept after each slot action (≈0.3 s); it always expires on its own |
+| `visitPauseCapTicks` | 40 | Maximum ticks one restock may keep printing paused (≈2 s), so a stalled sync cannot freeze printing |
 | `includeChests` / `includeBarrels` / `includeShulkerBoxes` | true | Which containers to scan |
 | `shareFeederContainers` | `true` | Read the containers registered by mapart-feeder (read-only `config/mapartfeeder.json`) and use its survey order |
 | `onlyMarkedContainers` | `false` | Open only chests registered in mapart-feeder; unmarked containers are never touched |
@@ -139,7 +142,7 @@ build.cmd build
 
 The first run needs `tools\prepare.cmd` to prepare the isolated Gradle distribution. The build keeps Gradle caches, the Java user directory, and temporary directories in the parent (session) directory of the project, so it does not pollute system directories.
 
-Output: `build/libs/rail-restock-0.3.1.jar`.
+Output: `build/libs/rail-restock-<version>.jar`.
 
 ## Notes
 

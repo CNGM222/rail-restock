@@ -12,6 +12,7 @@
   "options.railrestock.value": "%s：%s",
   "options.railrestock.unobtrusiveInteraction": "无感开箱",
   "options.railrestock.printPauseTicks": "暂停打印时长（tick）",
+  "options.railrestock.visitPauseCapTicks": "补料暂停上限（tick）",
   "options.railrestock.openTimeoutTicks": "开箱超时（tick）",
   "options.railrestock.syncTimeoutTicks": "同步超时（tick）",
   "options.railrestock.manualPauseTicks": "手动接管后等待（tick）",

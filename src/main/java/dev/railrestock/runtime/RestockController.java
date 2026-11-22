@@ -4,6 +4,7 @@ import dev.railrestock.RailRestockClient;
 import dev.railrestock.config.RestockConfig;
 import dev.railrestock.integration.FeederMarks;
 import dev.railrestock.integration.LitematicaBridge;
+import dev.railrestock.integration.PrinterBridge;
 import dev.railrestock.logic.ContainerRanking;
 import dev.railrestock.logic.ContainerVisits;
 import dev.railrestock.logic.CursorTransfer;
@@ -88,6 +89,8 @@ public final class RestockController {
     private boolean checkingTransfer;
     private int clicksThisTick;
     private final PrintPause printPause = new PrintPause();
+    private final PrinterBridge printer = new PrinterBridge();
+    private long visitPauseUntil;
     private long verificationBaseline;
     private String hudSummary = "";
     private long hudSummaryUntil;
@@ -302,6 +305,7 @@ public final class RestockController {
         marks.clear();
         hudSummary = "";
         hudSummaryUntil = 0;
+        visitPauseUntil = 0;
         releasePrintPause();
         InventorySyncTracker.reset();
         MaterialGenerationTracker.reset();
@@ -381,6 +385,8 @@ public final class RestockController {
                 hiddenSession = false;
                 phase = client.currentScreen == null ? Phase.IDLE : Phase.MANUAL_PAUSE;
                 printPause.release();
+                visitPauseUntil = 0;
+                printer.resume();
                 InteractionGate.setBusy(phase == Phase.MANUAL_PAUSE);
             }
         }
@@ -449,6 +455,9 @@ public final class RestockController {
             return;
         }
         candidate = picked;
+        // Printing is suspended for the whole visit, but never past this cap: a
+        // slow sync must not freeze printing for seconds.
+        visitPauseUntil = tick + config.visitPauseCapTicks;
         batch.clear();
         stacksThisVisit = 0;
         capacityLimited = false;
@@ -525,12 +534,25 @@ public final class RestockController {
     private void releasePrintPause() {
         printPause.release();
         InteractionGate.setBusy(false);
+        printer.resume();
     }
 
-    /** Re-evaluated every tick so the pause always ends, even if a phase stalls. */
+    /**
+     * Re-evaluated every tick so the pause always ends, even if a phase stalls.
+     * Both Litematica's Easy Place and the printer mod are held by the same flag.
+     */
     private void syncPrintGate() {
-        if (phase == Phase.MANUAL_PAUSE) return;
-        InteractionGate.setBusy(printPause.active(tick));
+        if (phase == Phase.MANUAL_PAUSE) {
+            releasePrintPause();
+            return;
+        }
+        boolean visiting = phase == Phase.OPENING || phase == Phase.READY || phase == Phase.VERIFYING;
+        boolean paused = printPause.active(tick) || (visiting && tick <= visitPauseUntil);
+        InteractionGate.setBusy(paused);
+        // The mixin cancels the printer's own tick when the gate is closed, so the
+        // config switch is only touched on builds without that hook (no flicker).
+        if (printer.hasTickHook()) printer.resume();
+        else printer.setSuspended(paused);
     }
 
     private void requestCount() {
@@ -976,6 +998,7 @@ public final class RestockController {
         hiddenSession = false;
         phase = Phase.IDLE;
         nextScan = tick + config.scanIntervalTicks;
+        visitPauseUntil = 0;
         releasePrintPause();
     }
 

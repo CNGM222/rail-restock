@@ -12,6 +12,7 @@
   "options.railrestock.value": "%s: %s",
   "options.railrestock.unobtrusiveInteraction": "Unobtrusive opening",
   "options.railrestock.printPauseTicks": "Print pause (ticks)",
+  "options.railrestock.visitPauseCapTicks": "Restock pause cap (ticks)",
   "options.railrestock.openTimeoutTicks": "Open timeout (ticks)",
   "options.railrestock.syncTimeoutTicks": "Sync timeout (ticks)",
   "options.railrestock.manualPauseTicks": "Wait after takeover (ticks)",
