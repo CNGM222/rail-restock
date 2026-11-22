@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.feederrestock.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ClientPlayNetworkHandlerMixin",
+    "HandledScreenMixin",
+    "LitematicaEasyPlaceMixin",
+    "LitematicaMaterialListMixin",
+    "MinecraftClientMixin",
+    "PrinterPauseMixin"
+  ],
+  "injectors": { "defaultRequire": 1 }
+}

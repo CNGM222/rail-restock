@@ -23,7 +23,7 @@ public final class Dl {
                 .build();
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofMinutes(15))
-                .header("User-Agent", "rail-restock-build")
+                .header("User-Agent", "feeder-restock-build")
                 .GET()
                 .build();
         HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());

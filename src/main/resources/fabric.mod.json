@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "id": "railrestock",
+  "id": "feederrestock",
   "version": "${version}",
-  "name": "Rail Restock",
-  "description": "Restocks the selected Litematica placement from normally reachable containers, including while riding a minecart.",
+  "name": "Feeder Restock",
+  "description": "Restocks the selected Litematica placement from the containers registered with mapart-feeder. You move the player yourself; a registered chest is only used once you are within interaction range.",
   "authors": ["CNGM222"],
   "license": "MIT",
   "environment": "client",
-  "entrypoints": { "client": ["dev.railrestock.RailRestockClient"] },
-  "mixins": ["railrestock.mixins.json"],
+  "entrypoints": { "client": ["dev.feederrestock.FeederRestockClient"] },
+  "mixins": ["feederrestock.mixins.json"],
   "depends": {
     "fabricloader": ">=0.18.1",
     "minecraft": "1.21.11",
@@ -16,5 +16,8 @@
     "fabric-api": "*",
     "litematica": "*",
     "malilib": "*"
+  },
+  "recommends": {
+    "mapartfeeder": "*"
   }
 }

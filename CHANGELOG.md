@@ -1,5 +1,17 @@
 # 更新记录
 
+## 0.6.0
+
+**项目改名**：`rail-restock` → **`feeder-restock`**（Mod ID `feederrestock`、包名 `dev.feederrestock`、配置文件 `config/feederrestock.json`、Mixin 配置与语言文件路径同步改名）。旧版 JAR 必须删除，旧配置文件不再读取。
+
+- **不再用于矿车，也不再自己扫描周围容器**：取值来源只剩 mapart-feeder 登记的容器。
+  - 删除了整段“扫描附近方块找容器”的逻辑（`ContainerScanner.find`）与相关配置项 `shareFeederContainers`、`onlyMarkedContainers`、`includeChests`、`includeBarrels`、`includeShulkerBoxes`。
+  - 现在直接遍历 `config/mapartfeeder.json` 的 `containers`：只处理当前维度、当前交互距离内、按 mapart-feeder 勘察顺序选中的箱子；没登记、文件缺失、登记表为空时只提示，不再退回乱翻。
+  - 双箱无论登记哪一半都能识别为同一个容器（`FeederMarks.positions` + 规范化的双箱键）。
+- **开箱前提前暂停打印**：新增 `preOpenPauseTicks`（默认 5 tick ≈ 0.25 秒）。选定容器后先停印、再开箱，避免打印机正好在开箱瞬间放方块；随后照旧覆盖开箱与搬运，硬上限 `visitPauseCapTicks` 不变。
+- **文档与界面全部改写**：README / README.en / 验收清单去掉矿车场景；设置界面分页改为「交互 / 取料 / 超时 / 提示」，清掉已删除选项的标签，新增「开箱前提前暂停」。
+- 新增/更新测试：按维度过滤登记位置、设置界面翻译键集合、`preOpenPauseTicks` 默认值与滑条（沿用原有的语言与字节码守卫）。
+
 ## 0.5.3
 
 - **关箱速度**：结算请求（服务端完整库存快照）与关箱现在**在同一 tick 一起发出**，服务端按顺序先回快照、再处理关箱，因此箱子不再为等一次往返而一直敞着；正常补料时箱子从打开到关闭依旧只有几个 tick。
@@ -33,10 +45,10 @@
 
 - **新增图形化设置界面**：游戏内按 **F7** 打开，四个分页——交互 / 容器 / 节奏 / 提示，覆盖全部 20 项配置。
   - 布尔项用开/关按钮，数值项用滑条，范围与配置允许的区间一致，不会写出越界值。
-  - 改动先写入内存，切换分页或关闭界面时统一保存到 `config/railrestock.json`，拖动滑条不会反复写盘。
+  - 改动先写入内存，切换分页或关闭界面时统一保存到 `config/feederrestock.json`，拖动滑条不会反复写盘。
   - 底部有「恢复默认」与「完成」；界面全部使用原版控件，不依赖 ModMenu / Cloth Config。
 - 首次开启自动补料时会在聊天栏提示「按 F7 可以打开设置界面」。
-- 新增 `key.railrestock.settings` 按键（默认 F7，与 F8 同分类，可改绑）。
+- 新增 `key.feederrestock.settings` 按键（默认 F7，与 F8 同分类，可改绑）。
 - 新增翻译键与回归测试：每个配置字段在中英文语言文件里都必须有标签，两种语言键集合一致，滑条格式串保留两个占位符。
 - 补料、共享容器、极短暂停打印等行为不变。
 
@@ -83,7 +95,7 @@
 ## 0.2.2
 
 - `autoRecountMaterialList` 默认值由 `true` 改为 `false`：默认不再自动触发 Litematica 材料重算，因此不会出现它的「已添加任务」提示与 HUD 统计。
-- 需要时在 `config/railrestock.json` 里改成 `true` 即可恢复自动重算。
+- 需要时在 `config/feederrestock.json` 里改成 `true` 即可恢复自动重算。
 - 老配置文件若已有该字段会保留用户设置，不会被强制覆盖。
 
 ## 0.2.1
