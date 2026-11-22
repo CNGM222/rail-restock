@@ -4,8 +4,8 @@
 
 ```
 dist/
-├── 0.5.2/                    当前版本
-│   ├── rail-restock-0.5.2.jar   ← 放进 mods 的就是这个
+├── 0.5.3/                    当前版本
+│   ├── rail-restock-0.5.3.jar   ← 放进 mods 的就是这个
 │   ├── SHA256SUMS.txt           校验值
 │   └── BUILD_REPORT.md          该版本的构建与验证记录
 └── archive/                  历史版本（仅留档）

@@ -51,6 +51,8 @@ public final class RestockController {
 
     private static final int MAX_STACKS_PER_VISIT = 64;
     private static final int MAX_CLICKS_PER_TICK = 128;
+    /** Grace for a snapshot that does not match the plan to be superseded by a newer one. */
+    private static final long VERIFICATION_GRACE_TICKS = 10;
 
     private final MinecraftClient client;
     private final RestockConfig config;
@@ -83,6 +85,8 @@ public final class RestockController {
     private boolean hiddenSession;
     private Screen hiddenScreen;
     private boolean closingInternally;
+    /** The container is already closed while its authoritative snapshot is awaited. */
+    private boolean sessionClosed;
 
     private ItemStack transferItem = ItemStack.EMPTY;
     private int sourceSlot = -1;
@@ -92,6 +96,7 @@ public final class RestockController {
     private final PrinterBridge printer = new PrinterBridge();
     private long visitPauseUntil;
     private long verificationBaseline;
+    private long verificationSawAt = -1;
     private String hudSummary = "";
     private long hudSummaryUntil;
 
@@ -157,18 +162,29 @@ public final class RestockController {
         if (phase == Phase.IDLE || phase == Phase.MANUAL_PAUSE) return;
         enabled = false;
         stopRequested = false;
-        if (hiddenSession && hiddenScreen != null && client.currentScreen == null) {
-            closingInternally = true;
-            try {
-                client.setScreen(hiddenScreen);
-            } finally {
-                closingInternally = false;
+        if (hiddenSession) {
+            // No screen was ever shown, so this cannot come from a click: it is an
+            // internal recovery. Close the invisible container instead of leaving it
+            // open behind printing; only a cursor that cannot be emptied is handed
+            // back as a visible screen for the player to fix.
+            boolean current = ownedHandler != null && client.player != null
+                    && client.player.currentScreenHandler == ownedHandler;
+            if (current && clearCursorQuietly(ownedHandler)) {
+                closeSessionNow();
+            } else if (hiddenScreen != null && client.currentScreen == null) {
+                closingInternally = true;
+                try {
+                    client.setScreen(hiddenScreen);
+                } finally {
+                    closingInternally = false;
+                }
             }
         }
         hiddenSession = false;
         hiddenScreen = null;
         ownOpenRequested = false;
         ownedHandler = null;
+        sessionClosed = false;
         candidate = null;
         phase = Phase.MANUAL_PAUSE;
         InteractionGate.setBusy(true);
@@ -212,7 +228,7 @@ public final class RestockController {
         // container so their screen works, but keep restocking armed: it resumes as
         // soon as the screen is closed again.
         if (hiddenSession) safelyCloseHiddenSession();
-        if (phase != Phase.IDLE && phase != Phase.MANUAL_PAUSE) pauseForScreen();
+        if (phase != Phase.IDLE && phase != Phase.MANUAL_PAUSE && !sessionClosed) pauseForScreen();
         return false;
     }
 
@@ -247,7 +263,7 @@ public final class RestockController {
             ownOpenRequested = false;
             return;
         }
-        if (!handler.getCursorStack().isEmpty() && !returnCursorToSource(handler)) return;
+        if (!handler.getCursorStack().isEmpty() && !clearCursor(handler)) return;
         closingInternally = true;
         try {
             client.player.closeHandledScreen();
@@ -256,6 +272,34 @@ public final class RestockController {
         }
         ownedHandler = null;
         ownOpenRequested = false;
+    }
+
+    /**
+     * Puts the cursor stack back before any close, so no click can be lost and no
+     * item stays attached to the mouse once the container is gone.
+     */
+    private boolean clearCursor(ScreenHandler handler) {
+        if (handler.getCursorStack().isEmpty()) return true;
+        if (returnCursorToSource(handler)) return true;
+        ItemStack cursor = handler.getCursorStack();
+        if (cursor.isEmpty()) return true;
+        Slot destination = InventorySlots.destination(handler, client.player, cursor);
+        if (destination == null || InventorySlots.space(destination, cursor) < cursor.getCount()) {
+            return false;
+        }
+        holdPrintPause();
+        client.interactionManager.clickSlot(handler.syncId, destination.id, 0, SlotActionType.PICKUP, client.player);
+        return handler.getCursorStack().isEmpty();
+    }
+
+    /** Best effort: never throws while unwinding another failure. */
+    private boolean clearCursorQuietly(ScreenHandler handler) {
+        try {
+            return clearCursor(handler);
+        } catch (RuntimeException | LinkageError error) {
+            RailRestockClient.LOGGER.warn("归位鼠标物品失败：{}", LitematicaBridge.describeFailure(error));
+            return false;
+        }
     }
 
     private boolean returnCursorToSource(ScreenHandler handler) {
@@ -271,7 +315,7 @@ public final class RestockController {
     }
 
     public void disconnect() {
-        if (hiddenSession && client.player != null) {
+        if (client.player != null && client.player.currentScreenHandler != client.player.playerScreenHandler) {
             hiddenSession = false;
             closingInternally = true;
             try {
@@ -294,6 +338,7 @@ public final class RestockController {
         ownOpenRequested = false;
         hiddenSession = false;
         hiddenScreen = null;
+        sessionClosed = false;
         batch.clear();
         stacksThisVisit = 0;
         capacityLimited = false;
@@ -342,12 +387,13 @@ public final class RestockController {
                 abort("当前玩家状态不能补料");
                 return;
             }
-            if (phase != Phase.IDLE && client.currentScreen != null && !ownsCurrentScreen()) {
+            if (phase != Phase.IDLE && phase != Phase.MANUAL_PAUSE && !sessionClosed
+                    && client.currentScreen != null && !ownsCurrentScreen()) {
                 // Fallback for a screen that appeared without going through our hook.
                 pauseForScreen();
                 return;
             }
-            if (ownedHandler != null && client.player.currentScreenHandler != ownedHandler) {
+            if (ownedHandler != null && !sessionClosed && client.player.currentScreenHandler != ownedHandler) {
                 ownedHandler = null;
                 finish("容器已关闭或被替换，稍后重新扫描", false);
                 return;
@@ -359,7 +405,7 @@ public final class RestockController {
                     abort(stopRequested ? "自动补料已关闭" : "投影或统计范围已变化，已结束旧任务");
                     return;
                 }
-                if (candidate != null && scanner.hit(client, candidate.pos(), config) == null) {
+                if (!sessionClosed && candidate != null && scanner.hit(client, candidate.pos(), config) == null) {
                     abort("已离开容器可交互范围，等待下次经过");
                     return;
                 }
@@ -375,19 +421,11 @@ public final class RestockController {
             showStatus();
         } catch (RuntimeException | LinkageError error) {
             RailRestockClient.LOGGER.error("Rail Restock 已安全停用", error);
-            enabled = false;
-            notice("补料已停用：" + LitematicaBridge.describeFailure(error));
+            String message = "补料已停用：" + LitematicaBridge.describeFailure(error);
             try {
-                abort("集成或交互失败；未继续发送操作");
-            } catch (RuntimeException ignored) {
-                ownedHandler = null;
-                ownOpenRequested = false;
-                hiddenSession = false;
-                phase = client.currentScreen == null ? Phase.IDLE : Phase.MANUAL_PAUSE;
-                printPause.release();
-                visitPauseUntil = 0;
-                printer.resume();
-                InteractionGate.setBusy(phase == Phase.MANUAL_PAUSE);
+                emergencyStop();
+            } finally {
+                notice(message);
             }
         }
     }
@@ -546,8 +584,10 @@ public final class RestockController {
             releasePrintPause();
             return;
         }
-        boolean visiting = phase == Phase.OPENING || phase == Phase.READY || phase == Phase.VERIFYING;
-        boolean paused = printPause.active(tick) || (visiting && tick <= visitPauseUntil);
+        boolean visiting = phase == Phase.OPENING || phase == Phase.READY
+                || (phase == Phase.VERIFYING && !sessionClosed);
+        boolean paused = printPause.active(tick) || (visiting && tick <= visitPauseUntil)
+                || InventoryGuard.blocksPrinting();
         InteractionGate.setBusy(paused);
         // The mixin cancels the printer's own tick when the gate is closed, so the
         // config switch is only touched on builds without that hook (no flicker).
@@ -652,6 +692,7 @@ public final class RestockController {
         ownedHandler = null;
         ownOpenRequested = true;
         hiddenSession = false;
+        sessionClosed = false;
         phase = Phase.OPENING;
         deadline = tick + config.openTimeoutTicks;
         status = "正在打开附近容器";
@@ -832,7 +873,7 @@ public final class RestockController {
         return result;
     }
 
-    /** Request a full vanilla snapshot in the CURRENT session, with no second opening. */
+    /** Request a full vanilla snapshot, then close: never hold the chest open for it. */
     private void beginVerification(String reason) {
         pendingReason = reason;
         if (!ownedHandler.getCursorStack().isEmpty()) {
@@ -840,12 +881,15 @@ public final class RestockController {
             return;
         }
         verificationBaseline = InventorySyncTracker.sequence();
+        verificationSawAt = -1;
         phase = Phase.VERIFYING;
         deadline = tick + config.syncTimeoutTicks;
         status = "结算：" + reason;
-        // Hold the gate only for this short window; the deadline releases it, and
-        // the comparison below reads the container side, so printing may resume.
+        // Hold the gate only for this tick and the short settle window behind it: the
+        // request and the close leave together, so the wait for a round trip no longer
+        // keeps the container open or freezes printing.
         holdPrintPause();
+        InventorySyncTracker.track(ownedHandler.syncId);
         // Vanilla 1.21.11 accepts PICKUP/-1 as a no-op even if its cursor differs.
         // A stale revision requests updateToClient -> syncState. Normal successful
         // clicks have no guaranteed reply because their prediction hashes may match.
@@ -853,15 +897,62 @@ public final class RestockController {
         client.getNetworkHandler().sendPacket(new ClickSlotC2SPacket(
                 ownedHandler.syncId, -1, (short) -1, (byte) 0, SlotActionType.PICKUP,
                 Int2ObjectMaps.emptyMap(), ItemStackHash.EMPTY));
+        if (closeSessionNow()) {
+            // The container is gone, so the visit-wide window has nothing left to guard.
+            visitPauseUntil = 0;
+        }
+    }
+
+    /**
+     * Closes the container session in the tick the batch finished. The snapshot
+     * request is already queued, so the server answers it before it processes the
+     * close and the reply still arrives on the remembered sync id.
+     *
+     * @return true when no container is open any more
+     */
+    private boolean closeSessionNow() {
+        ScreenHandler handler = ownedHandler;
+        if (handler != null && client.player != null && client.player.currentScreenHandler == handler) {
+            if (!clearCursorQuietly(handler)) return false;
+            closingInternally = true;
+            try {
+                client.player.closeHandledScreen();
+            } finally {
+                closingInternally = false;
+            }
+        }
+        hiddenScreen = null;
+        hiddenSession = false;
+        ownOpenRequested = false;
+        sessionClosed = true;
+        return client.player == null || client.player.currentScreenHandler != handler;
     }
 
     private void waitForVerification() {
+        if (ownedHandler == null) {
+            finish("容器会话已结束", false);
+            return;
+        }
+        if (!sessionClosed && !closeSessionNow()) {
+            // A cursor stack that cannot be placed anywhere has to be handed to the
+            // player, so the container stays open and the gate keeps printing paused.
+            status = "等待归位鼠标物品后关闭容器";
+        }
         InventorySyncTracker.Snapshot snapshot = InventorySyncTracker.latest(ownedHandler.syncId);
         if (snapshot != null && snapshot.sequence() > verificationBaseline) {
-            // An earlier correction can already be in flight. Wait for the batch's
-            // final totals rather than treating the first intermediate packet as final.
             boolean matches = batch.stream().allMatch(entry -> snapshotMatches(snapshot, entry));
-            if (matches || tick > deadline) verifyVisit(snapshot, matches);
+            if (matches) {
+                verifyVisit(snapshot, true);
+                return;
+            }
+            // An earlier click can already have forced an intermediate resync. Give the
+            // batch's final totals a short grace, then settle with the newest snapshot:
+            // the container is closed, so waiting the whole timeout would only delay the
+            // next chest for no gain.
+            if (verificationSawAt < 0) verificationSawAt = tick;
+            if (tick - verificationSawAt >= VERIFICATION_GRACE_TICKS || tick > deadline) {
+                verifyVisit(snapshot, false);
+            }
         } else if (tick > deadline) {
             finish(pendingReason + "；服务端完整库存确认超时，本次转移未标记成功", false);
         }
@@ -945,6 +1036,9 @@ public final class RestockController {
         hiddenSession = false;
         ownOpenRequested = false;
         if (ownedHandler != null && client.player != null && client.player.currentScreenHandler == ownedHandler) {
+            // A stack still on the cursor must go back first: closing with it would
+            // drop or merge it on the server side and leave nothing to point at.
+            clearCursorQuietly(ownedHandler);
             closingInternally = true;
             try {
                 client.player.closeHandledScreen();
@@ -953,6 +1047,49 @@ public final class RestockController {
             }
         }
         ownedHandler = null;
+        sessionClosed = false;
+    }
+
+    /**
+     * Last-resort stop after an unexpected failure. Everything is best effort,
+     * because the failure itself may already have broken the state we read; the
+     * interaction gate stays closed while any container or cursor item remains.
+     */
+    private void emergencyStop() {
+        enabled = false;
+        stopRequested = false;
+        try {
+            if (ownedHandler != null && client.player != null
+                    && client.player.currentScreenHandler == ownedHandler) {
+                clearCursorQuietly(ownedHandler);
+                closeSessionNow();
+            }
+        } catch (RuntimeException | LinkageError error) {
+            RailRestockClient.LOGGER.warn("结束容器会话时出错：{}", LitematicaBridge.describeFailure(error));
+        } finally {
+            ownedHandler = null;
+            hiddenSession = false;
+            hiddenScreen = null;
+            ownOpenRequested = false;
+            sessionClosed = false;
+            context = null;
+            scope = null;
+            candidate = null;
+            awaitingCount = false;
+            countRequestQueued = false;
+            batch.clear();
+            stacksThisVisit = 0;
+            capacityLimited = false;
+            blockedItems.clear();
+            checkingTransfer = false;
+            transferItem = ItemStack.EMPTY;
+            sourceSlot = -1;
+            visitPauseUntil = 0;
+            printPause.release();
+            phase = client.currentScreen == null ? Phase.IDLE : Phase.MANUAL_PAUSE;
+            InteractionGate.setBusy(phase == Phase.MANUAL_PAUSE);
+            printer.resume();
+        }
     }
 
     private void finish(String reason, boolean success) {
@@ -996,6 +1133,7 @@ public final class RestockController {
         stopRequested = false;
         ownOpenRequested = false;
         hiddenSession = false;
+        sessionClosed = false;
         phase = Phase.IDLE;
         nextScan = tick + config.scanIntervalTicks;
         visitPauseUntil = 0;

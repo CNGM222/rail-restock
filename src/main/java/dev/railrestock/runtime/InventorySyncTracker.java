@@ -6,13 +6,21 @@ import net.minecraft.screen.ScreenHandler;
 import net.minecraft.screen.slot.Slot;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Only advanced after a full server inventory packet was applied client-side. */
 public final class InventorySyncTracker {
     private static long sequence;
     private static final Map<Integer, Snapshot> fullUpdates = new HashMap<>();
+    /**
+     * Session ids whose snapshot is still awaited after the container was closed.
+     * The close happens before the reply, so the current handler alone cannot tell
+     * which incoming packets are ours.
+     */
+    private static final Set<Integer> tracked = new HashSet<>();
 
     public record Snapshot(long sequence, List<ItemStack> contents) {
         public long count(ScreenHandler handler, PlayerEntity player, ItemStack stack, boolean playerSlots) {
@@ -34,6 +42,16 @@ public final class InventorySyncTracker {
         fullUpdates.put(syncId, new Snapshot(++sequence, contents.stream().map(ItemStack::copy).toList()));
     }
 
+    /** Keeps recording one closed session's sync id until its snapshot arrives. */
+    public static void track(int syncId) {
+        if (tracked.size() > 8) tracked.clear();
+        tracked.add(syncId);
+    }
+
+    public static boolean isTracked(int syncId) {
+        return tracked.contains(syncId);
+    }
+
     public static long sequence() {
         return sequence;
     }
@@ -49,6 +67,7 @@ public final class InventorySyncTracker {
 
     public static void reset() {
         fullUpdates.clear();
+        tracked.clear();
         sequence = 0L;
     }
 }

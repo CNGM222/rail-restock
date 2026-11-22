@@ -15,8 +15,13 @@ public abstract class ClientPlayNetworkHandlerMixin {
     @Inject(method = "onInventory", at = @At("TAIL"))
     private void railrestock$afterAuthoritativeContents(InventoryS2CPacket packet, CallbackInfo ci) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null && (packet.syncId() == 0
-                || packet.syncId() == client.player.currentScreenHandler.syncId)) {
+        if (client.player == null) return;
+        // The container is closed as soon as the transfer batch ends, so its snapshot
+        // arrives after the handler is gone: a session id we asked for must still be
+        // recorded, otherwise every visit would end as "unconfirmed".
+        if (packet.syncId() == 0
+                || packet.syncId() == client.player.currentScreenHandler.syncId
+                || InventorySyncTracker.isTracked(packet.syncId())) {
             InventorySyncTracker.fullUpdate(packet.syncId(), packet.contents());
         }
     }
