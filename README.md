@@ -132,6 +132,33 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 - 非原版容器方块（模组箱子等）只在主手为空时才会被尝试，避免误放物品。
 - 隐藏界面是**纯客户端**行为：服务器看到的就是一次正常开箱。请仅在允许自动补料的世界或服务器使用。
 
+## 目录结构
+
+仓库只保留源码、文档和脚本；构建产物、缓存都不进版本库。
+
+```
+rail-restock/
+├── src/main/java/dev/railrestock/     模组源码
+│   ├── client/        设置界面
+│   ├── config/        配置读写
+│   ├── integration/   Litematica / 投影打印机 / mapart-feeder 的反射适配
+│   ├── logic/         纯逻辑（取料规划、选箱、暂停窗口等，都有单元测试）
+│   ├── mixin/         注入点
+│   └── runtime/       补料状态机与交互
+├── src/main/resources/                模组元数据、Mixin 配置、中英文语言文件
+├── src/test/java/                     单元测试与字节码守卫测试
+├── tools/                             构建环境准备与排查脚本（见 tools/README.md）
+├── dist/                              可安装的发布包（见 dist/README.md）
+│   ├── 0.5.2/           当前版本
+│   └── archive/         历史版本留档
+├── build.gradle / settings.gradle / gradle.properties
+├── build.cmd                          Windows 构建入口
+├── README.md / README.en.md / CHANGELOG.md / GAME_TEST_CHECKLIST.md / LICENSE
+└── .gitignore
+```
+
+`build/`、`.gradle/`、`logs/` 是构建时自动生成的，删掉不影响任何东西——下次 `build.cmd` 会重建。Gradle 发行包与依赖缓存在**上一级会话目录**的 `.gradle-dist/`、`.gradle-user-home/`，不会写进项目，也不碰系统目录。
+
 ## 构建
 
 Windows 下执行：
@@ -142,7 +169,7 @@ build.cmd build
 
 首次需要 `tools\prepare.cmd` 准备隔离的 Gradle 发行包。构建把 Gradle 缓存、Java 用户目录与临时目录都放在工程的上级（会话）目录，不污染系统目录。
 
-产物：`build/libs/rail-restock-<版本>.jar`。
+产物：`build/libs/rail-restock-<版本>.jar`；要分发的安装包放到 `dist/<版本>/`。
 
 ## 备注
 

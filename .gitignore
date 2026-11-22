@@ -1,7 +1,23 @@
+# Gradle / 构建产物（可随时删除，重新构建会自动生成）
 .gradle/
 build/
 run/
-dist/
-*.log
+logs/
+dist/*
+
+# dist 只保留说明文件，安装包本身不进版本库（见 GitHub Releases）
+!dist/README.md
+
+# 本地构建环境（build.cmd 会把它们放在会话目录，这里再兜底一层）
+.gradle-dist/
+.gradle-user-home/
+.java-home/
+.tmp/
+
+# 编辑器 / 系统
 .idea/
 *.iml
+.vscode/
+*.log
+.DS_Store
+Thumbs.db

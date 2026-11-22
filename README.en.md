@@ -132,6 +132,33 @@ Restocking still happens **only within real interaction range**: a registered ch
 - Non-vanilla container blocks (modded chests, etc.) are only attempted when the main hand is empty, to avoid placing items by mistake.
 - Hiding the screen is **client-side only**: the server just sees a normal container opening. Use it only in worlds or on servers that allow automatic restocking.
 
+## Repository layout
+
+The repository holds sources, docs and scripts only; build output and caches stay out of it.
+
+```
+rail-restock/
+├── src/main/java/dev/railrestock/     mod sources
+│   ├── client/        settings screen
+│   ├── config/        config loading and saving
+│   ├── integration/   reflection adapters for Litematica, the printer, mapart-feeder
+│   ├── logic/         pure logic (transfer planning, container choice, pause window) with unit tests
+│   ├── mixin/         injection points
+│   └── runtime/       restock state machine and interaction
+├── src/main/resources/                mod metadata, mixin config, zh_cn/en_us language files
+├── src/test/java/                     unit tests and bytecode guard tests
+├── tools/                             build-environment helpers (see tools/README.md)
+├── dist/                              installable packages (see dist/README.md)
+│   ├── 0.5.2/           current version
+│   └── archive/         older versions, kept for reference
+├── build.gradle / settings.gradle / gradle.properties
+├── build.cmd                          Windows build entry
+├── README.md / README.en.md / CHANGELOG.md / GAME_TEST_CHECKLIST.md / LICENSE
+└── .gitignore
+```
+
+`build/`, `.gradle/` and `logs/` are generated during a build and can be deleted at any time — `build.cmd` recreates them. The Gradle distribution and dependency caches live in the **parent session directory** (`.gradle-dist/`, `.gradle-user-home/`), never inside the project and never in system directories.
+
 ## Building
 
 On Windows:
@@ -142,7 +169,7 @@ build.cmd build
 
 The first run needs `tools\prepare.cmd` to prepare the isolated Gradle distribution. The build keeps Gradle caches, the Java user directory, and temporary directories in the parent (session) directory of the project, so it does not pollute system directories.
 
-Output: `build/libs/rail-restock-<version>.jar`.
+Output: `build/libs/rail-restock-<version>.jar`; packages for distribution go to `dist/<version>/`.
 
 ## Notes
 
