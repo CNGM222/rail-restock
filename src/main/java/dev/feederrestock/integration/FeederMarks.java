@@ -24,7 +24,8 @@ import java.util.Set;
  * modification time) and re-parsed only when the file actually changed, so a
  * container registered mid-session is used without restarting the game.</p>
  */
-public final class FeederMarks {
+public final class FeederMarks implements MarkSource {
+    public static final String MOD_ID = "mapartfeeder";
     private static final String FILE_NAME = "mapartfeeder.json";
     /** Double-chest halves share one mark, exactly like mapart-feeder's cache key. */
     public record Mark(String dimension, long pos) { }
@@ -34,7 +35,13 @@ public final class FeederMarks {
     private long stamp = Long.MIN_VALUE;
     private long nextCheck;
 
+    /** True when mapart-feeder is installed, i.e. its list and its K key are in charge. */
+    public static boolean isInstalled() {
+        return FabricLoader.getInstance().isModLoaded(MOD_ID);
+    }
+
     /** Re-reads the file at most once per second; a missing file clears the marks. */
+    @Override
     public void refresh(long tick) {
         if (tick < nextCheck) return;
         nextCheck = tick + 20;
@@ -65,11 +72,13 @@ public final class FeederMarks {
         return present;
     }
 
+    @Override
     public int size() {
         return marks.size();
     }
 
     /** Registered positions in one dimension; these are the only sources we accept. */
+    @Override
     public List<BlockPos> positions(String dimension) {
         return positions(List.copyOf(marks), dimension);
     }
@@ -82,6 +91,7 @@ public final class FeederMarks {
         return result;
     }
 
+    @Override
     public void clear() {
         marks.clear();
         present = false;

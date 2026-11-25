@@ -1,7 +1,8 @@
 {
-  "key.category.feederrestock.main": "自动补料（对接 mapart-feeder）",
+  "key.category.feederrestock.main": "自动补料",
   "key.feederrestock.toggle": "开启/关闭自动补料",
   "key.feederrestock.settings": "打开自动补料设置",
+  "key.feederrestock.mark_container": "登记/取消登记准星容器",
   "chat.feederrestock.settingsHint": "按 F7 可以打开自动补料设置界面",
   "screen.feederrestock.settings": "Feeder Restock · 设置",
   "screen.feederrestock.page.interaction": "交互",

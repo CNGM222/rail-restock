@@ -69,6 +69,11 @@ public final class ContainerKnowledge {
         return entries.containsKey(key);
     }
 
+    /** Drops what we know about one container; called when its mark is removed. */
+    public void forget(long key) {
+        entries.remove(key);
+    }
+
     public long count(long key, ItemStack stack) {
         Entry entry = entries.get(key);
         if (entry == null) return 0;

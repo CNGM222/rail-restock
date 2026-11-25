@@ -4,6 +4,8 @@ import dev.feederrestock.FeederRestockClient;
 import dev.feederrestock.config.RestockConfig;
 import dev.feederrestock.integration.FeederMarks;
 import dev.feederrestock.integration.LitematicaBridge;
+import dev.feederrestock.integration.LocalMarks;
+import dev.feederrestock.integration.MarkSource;
 import dev.feederrestock.integration.PrinterBridge;
 import dev.feederrestock.logic.ContainerRanking;
 import dev.feederrestock.logic.ContainerVisits;
@@ -30,6 +32,7 @@ import net.minecraft.screen.sync.ItemStackHash;
 import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 
@@ -48,9 +51,11 @@ import java.util.Set;
  * success. Unobtrusive mode only suppresses the local container screen, so the
  * mouse stays captured, the view never turns and the held slot never changes.
  *
- * <p>Only containers registered with mapart-feeder are used; the mod never looks
- * for containers on its own. Printing is paused a few ticks before a container is
- * opened so the printer is never mid-placement when the inventory session starts.</p>
+ * <p>Only registered containers are used; the mod never looks for containers on its
+ * own. The list is mapart-feeder's when that mod is installed (shared), otherwise
+ * this mod's own list, filled by pressing K on a container. Printing is paused a
+ * few ticks before a container is opened so the printer is never mid-placement
+ * when the inventory session starts.</p>
  *
  * <p>One visit empties everything the container can give for the current
  * deficit in a bounded batch, then requests one full server snapshot in the same
@@ -75,7 +80,12 @@ public final class RestockController {
     private final ContainerScanner scanner = new ContainerScanner();
     private final Map<Long, Long> cooldowns = new HashMap<>();
     private final ContainerVisits visits = new ContainerVisits();
-    private final FeederMarks marks = new FeederMarks();
+    /** Our own registry, filled with K; only used when mapart-feeder is absent. */
+    private final LocalMarks ownMarks = new LocalMarks();
+    /** mapart-feeder's shared list when that mod is installed, otherwise {@link #ownMarks}. */
+    private final MarkSource marks;
+    /** True when mapart-feeder owns the list, so its K key must not be duplicated here. */
+    private final boolean sharedMarks;
     private final ContainerKnowledge knowledge = new ContainerKnowledge();
 
     private Phase phase = Phase.IDLE;
@@ -152,6 +162,8 @@ public final class RestockController {
     public RestockController(MinecraftClient client, RestockConfig config) {
         this.client = client;
         this.config = config;
+        this.sharedMarks = FeederMarks.isInstalled();
+        this.marks = sharedMarks ? new FeederMarks() : ownMarks;
     }
 
     public boolean isEnabled() {
@@ -175,6 +187,53 @@ public final class RestockController {
             stopRequested = phase != Phase.IDLE;
             notice(stopRequested ? "正在安全结束本次补料" : "自动补料已关闭");
         }
+    }
+
+    /**
+     * Registers or unregisters the container under the crosshair in this mod's own
+     * list (K). Only bound when mapart-feeder is absent: with that mod installed its
+     * K key and its {@code mapartfeeder.json} stay the single source of truth, so
+     * one key press can never edit two registries.
+     *
+     * <p>Either half of a double chest maps to the same canonical position, exactly
+     * like the restocking key, so marking the far half toggles the entry the mod
+     * already knows.</p>
+     */
+    public void markContainer() {
+        if (client.world == null || client.player == null) return;
+        if (!(client.crosshairTarget instanceof BlockHitResult hit)
+                || hit.getType() != HitResult.Type.BLOCK) {
+            notice("请先把准星对准原料容器");
+            return;
+        }
+        BlockPos clicked = hit.getBlockPos();
+        BlockState state = client.world.getBlockState(clicked);
+        if (!ContainerScanner.isContainerBlock(state)) {
+            notice("准星指向的不是箱子/木桶/潜影盒");
+            return;
+        }
+        BlockPos canonical = BlockPos.fromLong(scanner.keyOf(client, clicked));
+        String dimension = client.world.getRegistryKey().getValue().toString();
+        switch (ownMarks.toggle(dimension, canonical)) {
+            case ADDED -> {
+                ownMarks.save();
+                nextScan = 0;
+                nextHighlightRefresh = 0;
+                notice("已登记原料容器 " + shortPos(canonical) + "（共 " + ownMarks.size() + " 个）");
+            }
+            case REMOVED -> {
+                ownMarks.save();
+                knowledge.forget(canonical.asLong());
+                nextScan = 0;
+                nextHighlightRefresh = 0;
+                notice("已取消登记容器 " + shortPos(canonical));
+            }
+            case LIMIT -> notice("登记的容器过多（上限 " + LocalMarks.MAX_MARKS + "）");
+        }
+    }
+
+    private static String shortPos(BlockPos pos) {
+        return pos.getX() + ", " + pos.getY() + ", " + pos.getZ();
     }
 
     /** Called by real user interaction with a screen we own, never by our own clicks. */
@@ -510,13 +569,10 @@ public final class RestockController {
         cooldowns.entrySet().removeIf(entry -> entry.getValue() <= tick);
         marks.refresh(tick);
         knowledge.expire(tick, config.knowledgeExpireTicks);
-        if (!marks.isPresent()) {
-            status = "未找到 mapart-feeder 的登记（config/mapartfeeder.json）";
-            nextScan = tick + Math.max(config.scanIntervalTicks, 20);
-            return;
-        }
         if (marks.size() == 0) {
-            status = "mapart-feeder 里还没有登记容器：对准箱子按 K 登记";
+            status = sharedMarks
+                    ? "还没有登记容器：对准箱子按 K 登记（与 mapart-feeder 共用清单）"
+                    : "还没有登记容器：对准箱子按 K 登记";
             nextScan = tick + Math.max(config.scanIntervalTicks, 20);
             return;
         }

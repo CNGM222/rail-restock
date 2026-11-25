@@ -3,6 +3,7 @@ package dev.feederrestock;
 import dev.feederrestock.client.ContainerHighlightRenderer;
 import dev.feederrestock.client.RestockConfigScreen;
 import dev.feederrestock.config.RestockConfig;
+import dev.feederrestock.integration.FeederMarks;
 import dev.feederrestock.runtime.RestockController;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -24,6 +25,7 @@ public final class FeederRestockClient implements ClientModInitializer {
     private static KeyBinding toggleKey;
     private static KeyBinding settingsKey;
     private static RestockConfig config;
+    private static KeyBinding markKey;
     private static boolean settingsHinted;
 
     @Override
@@ -36,6 +38,12 @@ public final class FeederRestockClient implements ClientModInitializer {
                 "key.feederrestock.toggle", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F8, category));
         settingsKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.feederrestock.settings", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_F7, category));
+        // With mapart-feeder installed its own K key edits the shared list; binding a
+        // second K here would mark twice on one press.
+        if (!FeederMarks.isInstalled()) {
+            markKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                    "key.feederrestock.mark_container", InputUtil.Type.KEYSYM, GLFW.GLFW_KEY_K, category));
+        }
         ClientTickEvents.START_CLIENT_TICK.register(client -> {
             while (toggleKey.wasPressed()) {
                 if (client.currentScreen == null && client.player != null) {
@@ -51,14 +59,20 @@ public final class FeederRestockClient implements ClientModInitializer {
                     client.setScreen(new RestockConfigScreen(null, config));
                 }
             }
+            if (markKey != null) {
+                while (markKey.wasPressed()) {
+                    if (client.currentScreen == null && client.player != null) controller.markContainer();
+                }
+            }
             controller.tick();
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> controller.disconnect());
         String version = net.fabricmc.loader.api.FabricLoader.getInstance()
                 .getModContainer("feederrestock").map(c -> c.getMetadata().getVersion().getFriendlyString())
                 .orElse("dev");
-        LOGGER.info("Feeder Restock {} ready (unobtrusive={}, autoRecount={})",
-                version, config.unobtrusiveInteraction, config.autoRecountMaterialList);
+        LOGGER.info("Feeder Restock {} ready (marks={}, unobtrusive={}, autoRecount={})",
+                version, FeederMarks.isInstalled() ? "mapart-feeder" : "local",
+                config.unobtrusiveInteraction, config.autoRecountMaterialList);
     }
 
     public static RestockController controller() {

@@ -1,7 +1,8 @@
 {
-  "key.category.feederrestock.main": "Auto restock (mapart-feeder)",
+  "key.category.feederrestock.main": "Auto restock",
   "key.feederrestock.toggle": "Toggle auto restock",
   "key.feederrestock.settings": "Open restock settings",
+  "key.feederrestock.mark_container": "Register / unregister the aimed container",
   "chat.feederrestock.settingsHint": "Press F7 to open the restock settings",
   "screen.feederrestock.settings": "Feeder Restock · Settings",
   "screen.feederrestock.page.interaction": "Interaction",

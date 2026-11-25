@@ -2,14 +2,15 @@
 
 [English](README.en.md) | 简体中文
 
-Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影材料清单的**全部剩余缺口**，从**mapart-feeder 登记过的容器**取料；玩家自己走位、自己决定何时补料，默认以**无感模式**运行，并在开箱前提前几 tick 让打印机停手。
+Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影材料清单的**全部剩余缺口**，从**登记过的容器**取料（装了 mapart-feeder 就共用它的登记表，没装则用本 Mod 的 **K** 自己登记）；玩家自己走位、自己决定何时补料，默认以**无感模式**运行，并在开箱前提前几 tick 让打印机停手。
 
-## 只认 mapart-feeder 登记的容器
+## 登记容器（mapart-feeder 或本 Mod）
 
-本 Mod **不会主动搜索周围的箱子**，也不再扫描附近方块：唯一允许的取料来源是 `config/mapartfeeder.json` 里由 mapart-feeder 登记过的容器。
+本 Mod **不会主动搜索周围的箱子**，也不扫描附近方块：唯一允许的取料来源是**登记表**，按下面二选一：
 
-- 用 mapart-feeder 的 **K** 对准箱子登记一次，两个 Mod 就共用同一份登记表；本 Mod **只读**该文件，绝不回写。
-- mapart-feeder 没装、文件不存在、或登记表为空时，本 Mod 不会退回去乱翻周围的箱子，只会在状态里提示你需要先登记。
+- **装了 mapart-feeder**：直接共用它的 `config/mapartfeeder.json`，用它的 **K** 对准箱子登记/取消登记；本 Mod **只读**该文件，绝不回写，也不会再抢一个 K 键。
+- **没装 mapart-feeder**：本 Mod 自己接管 **K**（可在按键绑定里改）：准星对准箱子/木桶/潜影盒按一下登记，再按一下取消登记，写入 `config/feederrestock-containers.json`；文件格式与 mapart-feeder 的 `containers` 数组一致，两边可以互相复制。双箱任一半都算同一个容器，上限 256 个。
+- 登记表为空时只会在状态里提示你先登记，**不会退回去乱翻周围的箱子**。
 - 登记在远处的箱子不会被隔空打开：只有当你**自己走到交互距离内**时才会开箱取料。
 - 双箱无论登记的是哪一半，都按同一个容器处理；顺序沿用 mapart-feeder 的勘察逻辑：已知有料优先，其次按距离勘察没开过的，已知没有所需原料的不再打开。
 
@@ -28,7 +29,8 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 
 ## 功能
 
-- **F8** 开关，可在「选项 → 控制 → 按键绑定 → 自动补料（对接 mapart-feeder）」中改绑。
+- **F8** 开关，可在「选项 → 控制 → 按键绑定 → 自动补料」中改绑。
+- **K**（仅在没有 mapart-feeder 时出现）登记/取消登记准星所指的容器，写入本 Mod 自己的登记表；有 mapart-feeder 时这个键仍归它，避免一次按键同时改两份表。
 - **F7** 打开图形化设置界面（四个分页：交互 / 取料 / 超时 / 提示），改动即时保存，含「恢复默认」；全部用原版控件，不需要 ModMenu 或 Cloth Config。
 - 缺口来源是**当前选中并启用**的投影的材料清单，不合并其它投影。
 - 支持箱子/陷阱箱、木桶、放在世界中的潜影盒；双箱只算一次。
@@ -48,9 +50,9 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 ## 安装
 
 1. 备份存档，先在测试环境验证。
-2. 保持已有的 Fabric API、Litematica、MaLiLib 不变；不需要 Printer。**mapart-feeder 是必需的**，否则没有任何可取料的容器。
+2. 保持已有的 Fabric API、Litematica、MaLiLib 不变；不需要 Printer。**mapart-feeder 是可选的**：装了就和它共用登记表；没装则用本 Mod 的 **K** 自己登记。
 3. 把 `feeder-restock-<版本>.jar` 放进游戏实例的 `mods` 目录（不要放 `-sources.jar`）。
-4. 进入游戏，用 mapart-feeder 的 **K** 登记原料箱，选中并启用要打印的投影，按原来的方式开启 Easy Place，再按 **F8**。
+4. 进入游戏，用 **K** 登记原料箱（有 mapart-feeder 时用它的 K），选中并启用要打印的投影，按原来的方式开启 Easy Place，再按 **F8**。
 
 启动、断线、切换维度后自动补料默认关闭，不会记住开启状态。
 
@@ -58,7 +60,7 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 
 ## 依赖
 
-- **运行时**：Fabric API、Litematica、**MaLiLib** 和 mapart-feeder。MaLiLib 本来就是 Litematica 的强制依赖，同时也是本 Mod 世界内方框的绘制来源。
+- **运行时**：Fabric API、Litematica、**MaLiLib**；**mapart-feeder 可选**——装了则共用它的容器登记表，没装则用本 Mod 自己的登记表。MaLiLib 本来就是 Litematica 的强制依赖，同时也是本 Mod 世界内方框的绘制来源。
 - **方框不是本 Mod 自己拼的**：直接调用 MaLiLib 的 `fi.dy.masa.malilib.render.RenderUtils#renderAreaOutline`——Litematica 给投影画包围框用的就是同一个函数——并注册到 MaLiLib 的 world-last 渲染回调（`RenderEventHandler.registerWorldLastRenderer`）。所以不需要额外渲染库，也不需要自己管理顶点缓冲、渲染管线或深度状态。
 - **构建**：MaLiLib 以 `modCompileOnly` 从 Modrinth 取得（版本见 `gradle.properties` 的 `malilib_version`，当前为 0.27.2、版本 ID `zghuOVRx`）。它只参与编译，**不会**打进 `feeder-restock-*.jar`；运行时不限定具体小版本，0.27.x 均可。
 
@@ -118,11 +120,11 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 
 ## 登记与选箱
 
-- 只用 `config/mapartfeeder.json` 的 `containers` 数组（维度 + 坐标）；你在游戏里按 K 新登记的箱子，本 Mod 最多 1 秒后就能看到，不需要重启。
+- 登记表来源：装了 mapart-feeder 时读 `config/mapartfeeder.json`（只读）；没装时读本 Mod 的 `config/feederrestock-containers.json`。两者都是 `containers` 数组（维度 + 坐标），游戏内按 K 新登记的箱子最多 1 秒后就能看到，不需要重启。
 - **选箱顺序**：已知含有缺口原料的容器（按 `可用数量 × 64 ÷ (距离 + 1)`）→ 尚未开过的容器（按距离）→ 已知没有所需原料的容器直接跳过。
 - **内容缓存**只在真正开箱并拿到服务端完整库存、或取料结算的完整同步后写入；取走时同步扣减，所以同一容器不会被反复当成还有料。
 - **时效**：缓存默认 5 分钟（`knowledgeExpireTicks`）后失效并重新勘察；F8 关闭再开启、切换投影或统计范围会立即清空。
-- 只读该文件；即使文件被写坏，最多一秒钟后回退到上一次成功解析的登记表。
+- 只读登记文件；即使文件被写坏，最多一秒钟后回退到上一次成功解析的登记表。本 Mod 只在没有 mapart-feeder 时才写自己的 `config/feederrestock-containers.json`，**绝不改写 mapart-feeder 的文件**。
 
 ## 已知边界
 
@@ -133,6 +135,7 @@ Minecraft Java **1.21.11 / Fabric** 客户端 Mod。按所选 Litematica 投影�
 - 服务端强制关箱、其他插件改写库存等情况下，原版行为仍可能影响最终归位。中断后本 Mod 不把预测当作成功。
 - 非原版容器方块（模组箱子等）只在主手为空时才会被尝试，避免误放物品。
 - 隐藏界面是**纯客户端**行为：服务器看到的就是一次正常开箱。请仅在允许自动补料的世界或服务器使用。
+- 卸载 mapart-feeder 后本 Mod **不会自动继承**它的 `mapartfeeder.json`：请用 K 重新登记，或把它的 `containers` 数组复制进 `config/feederrestock-containers.json`（格式相同）。
 
 ## 目录结构
 
@@ -143,7 +146,7 @@ feeder-restock/
 ├── src/main/java/dev/feederrestock/     模组源码
 │   ├── client/        设置界面
 │   ├── config/        配置读写
-│   ├── integration/   Litematica / 投影打印机 / mapart-feeder 的反射适配
+│   ├── integration/   Litematica / 投影打印机 / 容器登记表（mapart-feeder 与本地）的适配
 │   ├── logic/         纯逻辑（取料规划、选箱、暂停窗口等，都有单元测试）
 │   ├── mixin/         注入点
 │   └── runtime/       补料状态机与交互
@@ -176,7 +179,7 @@ build.cmd build
 ## 备注
 
 - 材料清单通过反射访问 Litematica 的公开 getter，**不依赖 `toNbt`/`toJson`** 这类版本相关的持久化接口，也不占用 Litematica 的单槽 completion listener。
-- 本项目不包含 Litematica / MaLiLib / Fabric API / mapart-feeder，也不修改它们的文件。
+- 本项目不包含 Litematica / MaLiLib / Fabric API / mapart-feeder，也不修改它们的文件；没有 mapart-feeder 时只写自己的 `config/feederrestock-containers.json`。
 
 ## License / 许可证
 

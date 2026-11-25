@@ -1,6 +1,6 @@
 package dev.feederrestock.runtime;
 
-import dev.feederrestock.integration.FeederMarks;
+import dev.feederrestock.integration.MarkSource;
 import dev.feederrestock.logic.ContainerVisits;
 import net.minecraft.block.BarrelBlock;
 import net.minecraft.block.BlockState;
@@ -64,7 +64,7 @@ public final class ContainerScanner {
      * Registered containers of this dimension that are reachable right now and still
      * worth opening. Nothing outside the mark list is ever considered.
      */
-    public List<Candidate> findRegistered(MinecraftClient client, FeederMarks marks, String dimension,
+    public List<Candidate> findRegistered(MinecraftClient client, MarkSource marks, String dimension,
                                           Map<Long, Long> cooldowns, ContainerVisits visits, long tick) {
         List<Candidate> result = new ArrayList<>();
         if (client.player == null || client.world == null) return result;

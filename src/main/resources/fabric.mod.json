@@ -3,7 +3,7 @@
   "id": "feederrestock",
   "version": "${version}",
   "name": "Feeder Restock",
-  "description": "Restocks the selected Litematica placement from the containers registered with mapart-feeder. You move the player yourself; a registered chest is only used once you are within interaction range.",
+  "description": "Restocks the selected Litematica placement from registered containers: mapart-feeder's shared list when that mod is installed, otherwise this mod's own K-marked list. You move the player yourself; a registered chest is only used once you are within interaction range.",
   "authors": ["CNGM222"],
   "license": "MIT",
   "environment": "client",

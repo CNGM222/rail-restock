@@ -1,5 +1,17 @@
 # 更新记录
 
+## 0.8.0
+
+- **没有 mapart-feeder 时自己登记容器**：新增独立登记模式。
+  - 装了 mapart-feeder：行为不变，继续共用它的 `config/mapartfeeder.json`，本 Mod 只读，K 键仍归它（不会一次按键同时改两份表）。
+  - 没装 mapart-feeder：本 Mod 自己接管 **K**（可在按键绑定里改）。准星对准箱子/木桶/世界中的潜影盒按一下登记、再按一下取消登记，写入 **`config/feederrestock-containers.json`**；格式与 mapart-feeder 的 `containers` 数组完全一致，两份清单可以互相复制。
+  - 双箱任一半映射到同一个坐标（取较小的一半），登记/取消都只影响一个条目；上限 256 个，与 mapart-feeder 一致。
+  - 登记后立即刷新高亮与扫描节奏；取消登记会同时丢弃该容器的内容缓存，避免再按旧缓存取料。
+  - 状态与聊天提示相应改写：登记表为空时提示「对准箱子按 K 登记」，不再提 mapart-feeder 文件缺失。
+- 新增 `MarkSource` 抽象（`FeederMarks` / `LocalMarks`），选箱、扫描、高亮都只依赖它；`fabric.mod.json` 里 mapart-feeder 仍只是 `recommends`，不装也能完整使用。
+- 新增语言键 `key.feederrestock.mark_container`（中英文）。
+- 新增测试：`LocalMarksTest`（登记/取消、维度隔离、256 上限、与 mapart-feeder 同格式的序列化往返）与 `MarkingGuardTest`（K 键必须在 mapart-feeder 缺席时才绑定；登记必须校验容器方块并写盘）。
+
 ## 0.7.1
 
 - **修复世界内高亮框不显示**：0.7.0 用原版线段层自己拼顶点，在 1.21.11 的新渲染管线下世界里一个框都没画出来（只剩左上角文字）。现在改为**直接调用 MaLiLib 的 `RenderUtils.renderAreaOutline`**——Litematica 给投影画包围框用的同一个函数——并注册到 MaLiLib 的 world-last 渲染回调；绿/黄/灰仍按缓存状态取色。

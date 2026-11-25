@@ -2,14 +2,15 @@
 
 English | [简体中文](README.md)
 
-A Minecraft Java **1.21.11 / Fabric** client mod. It takes the **whole remaining shortfall** of the selected Litematica placement's material list from **containers registered with mapart-feeder**. You move the player yourself and decide when to restock; it runs **unobtrusively** and makes the printer stop a few ticks before a container is opened.
+A Minecraft Java **1.21.11 / Fabric** client mod. It takes the **whole remaining shortfall** of the selected Litematica placement's material list from **registered containers** (the mapart-feeder list when that mod is installed, otherwise this mod's own list, filled with **K**). You move the player yourself and decide when to restock; it runs **unobtrusively** and makes the printer stop a few ticks before a container is opened.
 
-## Only mapart-feeder registered containers
+## Registering containers (mapart-feeder or standalone)
 
-This mod **never searches for chests** and no longer scans nearby blocks: the only allowed source is `config/mapartfeeder.json`, the container list owned by mapart-feeder.
+This mod **never searches for chests** and does not scan nearby blocks: the only allowed source is the **registration list**, in one of two modes:
 
-- Mark a chest once with mapart-feeder's **K** key and both mods share that single list; this mod only **reads** the file and never writes it back.
-- If mapart-feeder is missing, the file is absent, or the list is empty, the mod does **not** fall back to looking around: it only tells you that nothing is registered yet.
+- **With mapart-feeder installed**: the shared `config/mapartfeeder.json` is used and its **K** key registers/unregisters chests; this mod only **reads** that file, never writes it back, and does not bind a second K.
+- **Without mapart-feeder**: this mod takes over **K** (rebindable): aim at a chest, barrel or shulker box and press it to register, press again to unregister. The list is written to `config/feederrestock-containers.json` with the same `containers` array layout as mapart-feeder, so the two lists can be copied between mods. Either half of a double chest maps to the same entry; the cap is 256.
+- An empty list only produces a status hint asking you to register a container; the mod does **not** fall back to rummaging through nearby chests.
 - A registered chest far away is never opened from a distance: restocking happens only after **you walk into interaction range**.
 - Either half of a double chest counts as the same container. Selection follows mapart-feeder's survey order: known sources first, then unopened chests by distance, and chests known to hold nothing useful are skipped.
 
@@ -28,7 +29,8 @@ The pause covers both printing paths: Litematica's **Easy Place** and the **lite
 
 ## Features
 
-- **F8** toggles it; rebind it under Options → Controls → Key Binds → "Auto restock (mapart-feeder)".
+- **F8** toggles it; rebind it under Options → Controls → Key Binds → "Auto restock".
+- **K** (only present without mapart-feeder) registers/unregisters the container under the crosshair in this mod's own list; with mapart-feeder installed that key stays its own, so one press never edits two lists.
 - **F7** opens a graphical settings screen (four tabs: Interaction / Taking / Timeouts / Feedback). Changes save immediately and there is a "reset to defaults" button; vanilla widgets only.
 - The shortfall comes from the material list of the **currently selected and enabled** placement only.
 - Supports chests/trapped chests, barrels, and shulker boxes placed in the world; a double chest counts once.
@@ -48,9 +50,9 @@ The pause covers both printing paths: Litematica's **Easy Place** and the **lite
 ## Installation
 
 1. Back up your world and test in a throwaway environment first.
-2. Keep your existing Fabric API, Litematica and MaLiLib; the printer is optional. **mapart-feeder is required**, otherwise there is no container to take from.
+2. Keep your existing Fabric API, Litematica and MaLiLib; the printer is optional. **mapart-feeder is optional**: with it the registration list is shared, without it this mod's **K** registers containers itself.
 3. Put `feeder-restock-<version>.jar` into the instance's `mods` folder (not the `-sources.jar`).
-4. In game, mark raw-material chests with mapart-feeder's **K**, select and enable your placement, enable Easy Place as usual, then press **F8**.
+4. In game, mark raw-material chests with **K** (mapart-feeder's K when installed), select and enable your placement, enable Easy Place as usual, then press **F8**.
 
 Auto restock is off by default after start-up, disconnect, or a dimension change.
 
@@ -58,7 +60,7 @@ Auto restock is off by default after start-up, disconnect, or a dimension change
 
 ## Dependencies
 
-- **At runtime**: Fabric API, Litematica, **MaLiLib** and mapart-feeder. MaLiLib is already a hard dependency of Litematica and is also where the world box is drawn from.
+- **At runtime**: Fabric API, Litematica, **MaLiLib**; **mapart-feeder optional** — when installed its container list is shared, otherwise this mod keeps its own list. MaLiLib is already a hard dependency of Litematica and is also where the world box is drawn from.
 - **The box is not drawn by this mod**: it calls MaLiLib's `fi.dy.masa.malilib.render.RenderUtils#renderAreaOutline` — the same routine Litematica uses for its placement boxes — from MaLiLib's world-last render callback (`RenderEventHandler.registerWorldLastRenderer`). No extra rendering library, no hand-written vertex flush, pipeline or depth state of its own.
 - **At build time**: MaLiLib is pulled from Modrinth as a `modCompileOnly` dependency (see `malilib_version` in `gradle.properties`, currently 0.27.2 / version id `zghuOVRx`). It is compile-time only and is **not** bundled into `feeder-restock-*.jar`; any 0.27.x works at runtime.
 
@@ -118,11 +120,11 @@ Either way, a successful restock updates the available counts silently, which is
 
 ## Registration and selection
 
-- Only the `containers` array of `config/mapartfeeder.json` (dimension + coordinates) is used. A chest registered with K in game is picked up within about a second, without restarting.
+- The list comes from `config/mapartfeeder.json` (read-only) when mapart-feeder is installed, otherwise from this mod's own `config/feederrestock-containers.json`. Both use the same `containers` array (dimension + coordinates), and a chest registered with K in game is picked up within about a second, without restarting.
 - **Order**: containers known to hold the missing material (scored by `useful × 64 ÷ (distance + 1)`), then never-opened containers nearest-first, and containers known to hold nothing useful are skipped.
 - **Contents are cached** only after a real open with a full server snapshot or after the settlement sync; taking items subtracts from the cache.
 - **Expiry**: entries expire after `knowledgeExpireTicks` (≈5 minutes); toggling F8 off and on, switching placements or the counting scope clears them immediately.
-- The file is read-only for this mod; if it is being rewritten, the last successfully parsed list stays in effect.
+- The list file is read-only for this mod; if it is being rewritten, the last successfully parsed list stays in effect. This mod only writes its own `config/feederrestock-containers.json` when mapart-feeder is absent, and never modifies mapart-feeder's file.
 
 ## Known limits
 
@@ -133,6 +135,7 @@ Either way, a successful restock updates the available counts silently, which is
 - If the server force-closes the container or another plugin rewrites the inventory, vanilla behaviour can still affect the final placement.
 - Non-vanilla container blocks are only attempted with an empty main hand, so nothing can be misplaced.
 - Hiding the screen is **client-side only**: the server sees a normal container open. Use it only in worlds or on servers where automatic restocking is allowed.
+- After removing mapart-feeder this mod does **not** import `mapartfeeder.json` automatically: register the containers again with K, or copy its `containers` array into `config/feederrestock-containers.json` (same format).
 
 ## Repository layout
 
@@ -141,7 +144,7 @@ feeder-restock/
 ├── src/main/java/dev/feederrestock/     mod sources
 │   ├── client/        settings screen
 │   ├── config/        configuration
-│   ├── integration/   reflection adapters for Litematica / printer / mapart-feeder
+│   ├── integration/   Litematica / printer / container-list (mapart-feeder and local) adapters
 │   ├── logic/         pure logic with unit tests
 │   ├── mixin/         injection points
 │   └── runtime/       restock state machine and interactions
@@ -168,7 +171,7 @@ build.cmd build
 ## Notes
 
 - The material list is read through Litematica's public getters via reflection, not through version-specific `toNbt`/`toJson` serialisers, and it does not occupy Litematica's single completion listener.
-- This repository does not include Litematica, MaLiLib, Fabric API or mapart-feeder, and never modifies their files.
+- This repository does not include Litematica, MaLiLib, Fabric API or mapart-feeder, and never modifies their files; without mapart-feeder it only writes its own `config/feederrestock-containers.json`.
 
 ## License
 
